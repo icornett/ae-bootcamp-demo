@@ -1,0 +1,137 @@
+name: Deploy Training Log
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  IMAGE_NAME: training-log
+
+jobs:
+  validate-specs:
+    name: Validate Specs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Spectral (OpenAPI linter)
+        run: npm install -g @stoplight/spectral-cli
+
+      - name: Validate OpenAPI spec
+        run: spectral lint specs/openapi/blog-api.yaml --ruleset @stoplight/spectral-oas
+
+  build-push:
+    name: Build & Push Image
+    runs-on: ubuntu-latest
+    needs: validate-specs
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ vars.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ vars.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy:
+    name: Deploy via Tofu
+    runs-on: ubuntu-latest
+    needs: build-push
+    if: github.ref == 'refs/heads/main'
+    # Required for OIDC — GitHub mints a short-lived token; no stored Azure credentials needed
+    permissions:
+      id-token: write
+      contents: read
+      secrets: write   # allows gh secret set to push ACR creds post-apply
+    defaults:
+      run:
+        working-directory: infra/terraform/azure
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+
+      - name: Tofu Init
+        run: tofu init
+
+      # Verify ACR name is available before apply (ACR names are globally unique).
+      # Fails fast if the name is taken by another tenant — avoids a mid-apply error.
+      - name: Check ACR name availability
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          # Compute the same name Tofu will use (subscription first 12 chars, dashes stripped)
+          SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          ACR_NAME="workoutblog$(echo ${SUB:0:12} | tr -d '-')"
+          RESULT=$(az acr check-name --name "$ACR_NAME" --query nameAvailable -o tsv)
+          if [ "$RESULT" = "false" ]; then
+            REASON=$(az acr check-name --name "$ACR_NAME" --query reason -o tsv)
+            if [ "$REASON" = "AlreadyExists" ]; then
+              echo "ACR '$ACR_NAME' already exists in this subscription — Tofu will import/reuse it."
+            else
+              echo "ACR name '$ACR_NAME' is taken by another tenant. Set acr_name variable to override." && exit 1
+            fi
+          else
+            echo "ACR name '$ACR_NAME' is available."
+          fi
+
+      # Multi-container group (Caddy + Sinatra) requires Terraform/Tofu —
+      # az container create CLI only supports single-container groups.
+      - name: Tofu Apply
+        env:
+          # Tofu uses OIDC token from the azure/login step — no client secret needed
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          tofu apply -auto-approve \
+            -var="image_tag=${{ github.sha }}" \
+            -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
+            -var="acme_email=${{ vars.ACME_EMAIL }}"
+
+      # Bootstrap ACR credentials into GitHub secrets so subsequent runs can push images.
+      # Uses GITHUB_TOKEN (secrets:write permission above) — no PAT needed.
+      - name: Push ACR credentials to GitHub secrets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ACR_SERVER=$(tofu output -raw acr_login_server)
+          ACR_USER=$(tofu output -raw acr_admin_username)
+          ACR_PASS=$(tofu output -raw acr_admin_password)
+          gh variable set ACR_REGISTRY --body "$ACR_SERVER" --repo ${{ github.repository }}
+          gh secret set ACR_USERNAME --body "$ACR_USER" --repo ${{ github.repository }}
+          gh secret set ACR_PASSWORD --body "$ACR_PASS" --repo ${{ github.repository }}
+
+      - name: Verify container group is running
+        run: |
+          az container show \
+            --resource-group workout-blog \
+            --name training-log \
+            --query "containers[].{name:name,state:instanceView.currentState.state}" \
+            --output table
+

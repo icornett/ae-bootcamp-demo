@@ -1,0 +1,315 @@
+openapi: 3.1.0
+info:
+  title: Training Log API
+  version: 1.0.0
+  description: |
+    REST API for the westrachel/training-log Sinatra workout app.
+    Backed by on-prem PostgreSQL at 192.168.1.5:5432.
+
+servers:
+  - url: https://gym.digitaldelirium.tech
+    description: Production (Traefik IngressRoute, West US 2 Azure spot nodes)
+
+tags:
+  - name: auth
+    description: User authentication
+  - name: workouts
+    description: Workout sessions
+  - name: exercises
+    description: Exercises within a workout
+
+paths:
+  /users/new:
+    get:
+      tags: [auth]
+      summary: Render sign-up form
+      operationId: getSignupForm
+      responses:
+        '200':
+          description: Sign-up HTML form
+
+  /users:
+    post:
+      tags: [auth]
+      summary: Create a new user account
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserCredentials'
+      responses:
+        '302':
+          description: Redirect to workouts list on success
+        '422':
+          description: Validation error (duplicate username, short password, etc.)
+
+  /sessions/new:
+    get:
+      tags: [auth]
+      summary: Render login form
+      operationId: getLoginForm
+      responses:
+        '200':
+          description: Login HTML form
+
+  /sessions:
+    post:
+      tags: [auth]
+      summary: Authenticate and create a session
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserCredentials'
+      responses:
+        '302':
+          description: Redirect to workouts on success
+        '422':
+          description: Invalid credentials
+
+    delete:
+      tags: [auth]
+      summary: Destroy the current session (logout)
+      operationId: destroySession
+      responses:
+        '302':
+          description: Redirect to login
+
+  /workouts:
+    get:
+      tags: [workouts]
+      summary: List all workouts for the authenticated user
+      operationId: listWorkouts
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: HTML list of workouts
+        '302':
+          description: Redirect to login if unauthenticated
+
+    post:
+      tags: [workouts]
+      summary: Create a new workout session
+      operationId: createWorkout
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WorkoutInput'
+      responses:
+        '302':
+          description: Redirect to workout detail on success
+        '422':
+          description: Validation error
+
+  /workouts/new:
+    get:
+      tags: [workouts]
+      summary: Render new workout form
+      operationId: getNewWorkoutForm
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: New workout HTML form
+
+  /workouts/{id}:
+    get:
+      tags: [workouts]
+      summary: Show a single workout with exercises
+      operationId: getWorkout
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Workout detail HTML
+        '404':
+          description: Workout not found
+
+    post:
+      tags: [workouts]
+      summary: Update a workout (form-based PUT override)
+      operationId: updateWorkout
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/WorkoutInput'
+                - type: object
+                  properties:
+                    _method:
+                      type: string
+                      enum: [put]
+      responses:
+        '302':
+          description: Redirect to updated workout
+        '422':
+          description: Validation error
+
+    delete:
+      tags: [workouts]
+      summary: Delete a workout and its exercises
+      operationId: deleteWorkout
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '302':
+          description: Redirect to workouts list
+
+  /workouts/{workout_id}/exercises:
+    post:
+      tags: [exercises]
+      summary: Add an exercise to a workout
+      operationId: createExercise
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workout_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ExerciseInput'
+      responses:
+        '302':
+          description: Redirect to workout detail
+        '422':
+          description: Validation error
+
+  /workouts/{workout_id}/exercises/{id}:
+    delete:
+      tags: [exercises]
+      summary: Remove an exercise from a workout
+      operationId: deleteExercise
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workout_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '302':
+          description: Redirect to workout detail
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: rack.session
+
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+
+  schemas:
+    UserCredentials:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          maxLength: 25
+        password:
+          type: string
+          minLength: 6
+
+    WorkoutInput:
+      type: object
+      required: [name, date]
+      properties:
+        name:
+          type: string
+          maxLength: 15
+          example: Upper Body
+        date:
+          type: string
+          format: date
+          example: '2024-01-15'
+
+    ExerciseInput:
+      type: object
+      required: [description, num_sets, num_reps, weight_description]
+      properties:
+        description:
+          type: string
+          maxLength: 40
+          example: Bench Press
+        num_sets:
+          type: integer
+          minimum: 1
+        num_reps:
+          type: integer
+          minimum: 1
+        weight_description:
+          type: string
+          maxLength: 10
+          example: 65 lbs
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+
+    Workout:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        date:
+          type: string
+          format: date
+        user_id:
+          type: integer
+
+    Exercise:
+      type: object
+      properties:
+        id:
+          type: integer
+        description:
+          type: string
+        num_sets:
+          type: integer
+        num_reps:
+          type: integer
+        weight_description:
+          type: string
+        workout_id:
+          type: integer

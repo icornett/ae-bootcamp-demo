@@ -1,282 +1,180 @@
-# GitHub Copilot Instructions — workout-blog (Infrastructure)
+# GitHub Copilot Instructions — workout-blog
 
 ## Repo Purpose
 
-This repository owns **all infrastructure and deployment automation** for the
-[westrachel/training-log](https://github.com/westrachel/training-log) Ruby/Sinatra
-application. No application code lives here. The deploy workflow builds the Docker image,
-pushes it to ACR, then runs `tofu apply` — all automatically on push to `main`.
+This workspace is centered on the infrastructure and deployment automation for the
+`training-log` application.
 
----
+- Infrastructure is defined in `infra/opentofu/azure/`.
+- Deployment is orchestrated by `.github/workflows/deploy.yaml`.
+- The application source is present in `blog/`.
+- The API contract lives in `specs/openapi/blog-api.yaml`.
 
-## Agent Usage
+When working in this repository, treat infrastructure and deployment changes as the
+default concern unless the task explicitly targets files under `blog/`.
 
-- Use agent customizations in `.github/agents/` for task-specific workflows.
-- Use `.github/agents/tdd-workflow.agent.md` for strict Test-Driven Development (Red-Green-Refactor) workflows.
-- Keep core repository standards and deployment guidance in this file.
-- Use the memory system below to capture active discoveries and durable learnings.
+## Current Repository Layout
+
+```text
+workout-blog/
+├── .github/
+│   ├── agents/
+│   ├── copilot-instructions.md
+│   ├── memory/
+│   └── workflows/
+├── blog/
+│   ├── .github/
+│   ├── workouts.rb
+│   ├── schema.sql
+│   └── README.md
+├── infra/
+│   └── opentofu/
+│       ├── azure/
+│       │   ├── main.tf
+│       │   ├── variables.tf
+│       │   ├── output.tf
+│       │   └── .terraform.lock.hcl
+│       └── vpn/
+├── specs/
+│   └── openapi/
+│       └── blog-api.yaml
+└── README.md
+```
+
+## Copilot Customizations In This Workspace
+
+### Root-level agents
+
+These agents are available in `.github/agents/` for the infrastructure workspace:
+
+- `tdd-workflow.agent.md`
+  Use for strict Red-Green-Refactor work on new features or failing tests.
+- `copilot-customization.agent.md`
+  Use for creating or updating Copilot instructions, agents, prompts, and related customization files.
+
+### App-level agents
+
+The application subtree in `blog/` has its own Copilot customizations under `blog/.github/`.
+If the task is primarily about the Sinatra application, check those app-specific agents and
+instructions before adding duplicate behavior at the root.
+
+### Guidance for agent selection
+
+- Use the root `tdd-workflow` agent when the task is test-driven and scoped to this repository.
+- Use the root `copilot-customization` agent when editing Copilot customization files.
+- Prefer root instructions for repo-wide guidance.
+- Prefer `blog/.github/` customizations for tasks that are specific to the app subdirectory.
 
 ## Memory System
 
-- Persistent Memory: This file (`.github/copilot-instructions.md`) contains foundational principles and workflows.
-- Working Memory: `.github/memory/` directory contains discoveries and patterns.
-- During active development, take notes in `.github/memory/scratch/working-notes.md` (not committed).
-- At end of session, summarize key findings into `.github/memory/session-notes.md` (committed).
-- Document recurring code patterns in `.github/memory/patterns-discovered.md` (committed).
-- Reference these files when providing context-aware suggestions.
+Repository memory for this workspace lives under `.github/memory/`.
 
----
+Current committed memory files:
 
-## Directory Layout
+- `.github/memory/README.md`
+- `.github/memory/patterns-discovered.md`
+- `.github/memory/session-notes.md`
 
-```
-workout-blog/
-├── .github/
-│   ├── copilot-instructions.md   # this file
-│   ├── agents/                   # Copilot agent customizations
-│   └── workflows/
-│       └── deploy.yaml           # Full CI/CD pipeline
-├── infra/
-│   └── terraform/
-│       ├── azure/
-│       │   └── main.tf           # All Azure resources (single file)
-│       └── vpn/
-│           └── openvpn-config/   # OpenVPN server/client configs (static reference)
-├── specs/
-│   └── openapi/
-│       └── blog-api.yaml         # OpenAPI 3.1 contract for the training-log API
-└── docs/
-    └── kubeadm-join.md           # On-prem k8s reference (informational only)
-```
+Scratch working notes live under `.github/memory/scratch/`.
 
----
+Use this memory system as follows:
 
-## Tech Stack
+- Put durable repo-specific conventions in `patterns-discovered.md`.
+- Put end-of-session summaries in `session-notes.md`.
+- Put temporary working notes in `scratch/` when you need to track active findings.
+- Keep this file focused on stable guidance, not session-specific notes.
 
-| Layer       | Technology                                               |
-| ----------- | -------------------------------------------------------- |
-| IaC         | OpenTofu >= 1.6 (`tofu` CLI)                             |
-| Provider    | `azurerm ~> 3.90` + `random ~> 3.6`                      |
-| Compute     | Azure Container Instance (multi-container group)         |
-| TLS         | Caddy sidecar + Let's Encrypt DNS-01 via Cloudflare      |
-| Database    | Azure PostgreSQL Flexible Server v16 (`B_Standard_B1ms`) |
-| Registry    | Azure Container Registry (Basic, admin enabled)          |
-| Secrets     | Azure Key Vault (Standard)                               |
-| Cert store  | Azure Storage File Share (Caddy `/data` volume)          |
-| DNS/Proxy   | Cloudflare (proxied A record to ACI public IP)           |
-| CI/CD       | GitHub Actions (OIDC, `tofu apply -auto-approve`)        |
-| API spec    | OpenAPI 3.1 (`specs/openapi/blog-api.yaml`)              |
-| API linting | Spectral (`@stoplight/spectral-oas`)                     |
+## Infrastructure Stack
 
----
+The currently deployed stack is defined by `infra/opentofu/azure/main.tf`.
 
-## Azure Architecture
+- IaC: OpenTofu >= 1.6
+- Providers: `hashicorp/azurerm ~> 3.90`, `hashicorp/random ~> 3.6`, `cloudflare/cloudflare ~> 5.0`
+- Compute: Azure Container Instance multi-container group
+- Reverse proxy and TLS: Caddy with Cloudflare DNS challenge
+- Database: Azure PostgreSQL Flexible Server 16
+- Secrets: Azure Key Vault
+- Persistent cert storage: Azure Storage Account and Azure File Share
+- DNS: Cloudflare proxied `A` record
+- Image source: `ghcr.io/icornett/training-log`
 
-```
-Internet
-  └── Cloudflare (proxied, SSL Full Strict)
-        └── ACI Public IP  [northcentralus]
-              └── Container Group: training-log
-                    ├── caddy  (0.25 cpu / 0.25 GB)   ports 80, 443
-                    │     ├── Let's Encrypt DNS-01 (CF_API_TOKEN secure env var)
-                    │     └── /data → Azure File Share  (cert persistence)
-                    └── training-log  (0.25 cpu / 0.5 GB)   localhost:4567
-                          └── DATABASE_URL ← Key Vault secret
-                                └── PostgreSQL Flexible Server (SSL enforced)
-                                      └── training_log database
-```
+## Deployment Reality
 
-### Key design decisions
+Do not rely on older assumptions about ACR or a separate image build job in this repo.
+The current deployment flow is:
 
-- **Caddy sidecar** terminates TLS via Let's Encrypt DNS-01; `CF_API_TOKEN` is a
-  `secure_environment_variable` — never written to disk or logs.
-- **Cert persistence**: Caddy `/data` mounted to an Azure File Share prevents
-  Let's Encrypt rate-limit hits across container restarts.
-- **PostgreSQL password** is generated by `random_password.pg` at apply time — never
-  stored in tfvars, CI secrets, or source. Full `DATABASE_URL` stored in Key Vault.
-- **ACR admin creds** are bootstrapped into GitHub secrets by the deploy job after the
-  first apply; no manual pre-seeding required after that.
-- **Region**: `northcentralus` — lowest cost for this SKU; Cloudflare proxy absorbs latency.
+1. Validate the OpenAPI spec.
+2. Log in to Azure with OIDC.
+3. Run `tofu init` in `infra/opentofu/azure/`.
+4. Run `tofu apply` with workflow-provided variables.
+5. Verify the ACI container group state.
 
----
+Important current behavior:
 
-## OpenTofu / Terraform Conventions
+- The application image is pulled from GHCR, not Azure Container Registry.
+- Cloudflare DNS is managed in OpenTofu.
+- The deployed image tag is selectable.
 
-### Provider version
+Image tag precedence in `.github/workflows/deploy.yaml`:
 
-```hcl
-terraform {
-  required_version = ">= 1.6"
-  required_providers {
-    azurerm = { source = "hashicorp/azurerm", version = "~> 3.90" }
-    random  = { source = "hashicorp/random",  version = "~> 3.6"  }
-  }
-}
-```
+1. Manual `workflow_dispatch` input `image_tag`
+2. Repository variable `DEPLOY_IMAGE_TAG`
+3. `github.sha`
 
-> **Do not upgrade to `azurerm ~> 4.x`** without a full migration test — v4 has
-> breaking changes to resources used here (container groups, Key Vault access policies).
+## Working Conventions
 
-### State
+### For infrastructure changes
 
-State is currently **local**. Before adding collaborators or running from multiple machines:
+- Make infrastructure edits in `infra/opentofu/azure/`.
+- Keep changes minimal and aligned with the current provider versions.
+- Run `tofu validate` after editing the module.
+- Use `tofu plan` for inspection when needed.
+- Do not introduce Azure resources that contradict the current architecture without updating `README.md` and this file.
 
-1. Create an Azure Storage Account + blob container.
-2. Add `backend "azurerm" {}` block to `main.tf`.
-3. `tofu init -migrate-state`.
+### For deployment changes
 
-### Variables
+- Keep `.github/workflows/deploy.yaml` aligned with the actual OpenTofu variables.
+- When adding a required variable or secret, update both `README.md` and this file.
+- Prefer explicit workflow inputs and repository variables over hardcoded deployment choices.
 
-| Variable              | Default                    | Notes                                            |
-| --------------------- | -------------------------- | ------------------------------------------------ |
-| `resource_group_name` | `workout-blog`             |                                                  |
-| `location`            | `northcentralus`           |                                                  |
-| `acr_name`            | _(auto-generated)_         | Override if name taken by another tenant         |
-| `pg_admin_login`      | `pgadmin`                  |                                                  |
-| `pg_database_name`    | `training_log`             |                                                  |
-| `image_tag`           | `latest`                   | Defaults to latest; CI can pin any published tag |
-| `domain`              | `gym.digitaldelirium.tech` | Managed as a proxied Cloudflare A record         |
-| `cloudflare_zone_id`  | _(required)_               | Cloudflare zone ID that owns `domain`            |
-| `acme_email`          | _(required)_               | Let's Encrypt registration email                 |
-| `cf_api_token`        | _(required, sensitive)_    | Cloudflare token with DNS RW + Zone Read         |
+### For application changes under `blog/`
 
-Supply `acme_email` via the `ACME_EMAIL` GitHub Actions variable and `cf_api_token`
-via the `CF_API_TOKEN` secret. Supply `cloudflare_zone_id` via the `CF_ZONE_ID`
-secret. **Never commit sensitive values.**
+- Expect app-specific guidance to live in `blog/.github/`.
+- Avoid placing app-only instructions at the root unless they apply broadly across the whole workspace.
 
-### ACR naming
+## Documentation Rules
 
-Auto-generated as `workoutblog<first-12-chars-of-subscription-id-dashes-removed>`.
-The deploy workflow checks availability before apply and fails fast if the name belongs
-to another tenant. Override with `var.acr_name`.
+When the infrastructure shape changes, update the relevant documentation in the same change:
 
-### Adding new resources
+- `README.md` for human-facing infrastructure overview
+- `.github/copilot-instructions.md` for Copilot-facing repo guidance
+- `.github/memory/patterns-discovered.md` for durable implementation patterns when appropriate
 
-1. Add the resource to `infra/terraform/azure/main.tf`.
-2. Add `output` blocks for values the workflow or operators need.
-3. Container secrets: add `azurerm_key_vault_secret` and reference in `secure_environment_variables`.
-4. Run `tofu validate && tofu plan` locally; include plan output in the PR description.
+Keep documentation current with:
 
----
+- actual file paths
+- actual deployed resources
+- actual workflow inputs, secrets, and variables
+- actual Copilot customization files present in the repo
 
-## CI/CD Pipeline (`deploy.yaml`)
+## Safe Defaults For Copilot
 
-**Triggers:** push to `main` and pull requests against `main`.
+- Assume infra work should start in `infra/opentofu/azure/` unless the user anchors elsewhere.
+- Assume documentation changes should also touch `README.md` when user-facing behavior changes.
+- Assume Copilot customization changes should inspect `.github/agents/`, `.github/memory/`, and any nearby `blog/.github/` files before editing.
+- Do not describe deleted or legacy systems as if they are still active.
 
-### Job dependency graph
-
-```
-validate-specs
-      |
-  build-push   (main branch only)
-      |
-   deploy      (main branch only)
-```
-
-### `validate-specs`
-
-- Installs Spectral: `npm install -g @stoplight/spectral-cli`
-- `spectral lint specs/openapi/blog-api.yaml --ruleset @stoplight/spectral-oas`
-- All downstream jobs are blocked on failure.
-
-### `build-push` (main only)
-
-- Logs in to ACR using `ACR_REGISTRY` var + `ACR_USERNAME`/`ACR_PASSWORD` secrets.
-- Builds and pushes two tags: `latest` and `<github.sha>`.
-
-### `deploy` (main only, after `build-push`)
-
-Uses OIDC via `azure/login@v2` — no long-lived Azure credentials stored in GitHub.
-
-```yaml
-permissions:
-  id-token: write
-  contents: read
-  secrets: write # needed for gh secret set to bootstrap ACR creds
-```
-
-Steps:
-
-1. Azure OIDC login.
-2. `tofu init` (working-directory: `infra/terraform/azure`).
-3. **ACR name check** — `az acr check-name` before apply; fails fast if taken by another tenant.
-4. `tofu apply -auto-approve` with `image_tag`, `cloudflare_zone_id`, `cf_api_token`, `acme_email` vars.
-5. **Bootstrap ACR credentials** — reads `acr_login_server`, `acr_admin_username`,
-   `acr_admin_password` from tofu outputs; writes to GitHub secrets/vars via `gh secret set`
-   using `GITHUB_TOKEN`. Subsequent runs are fully self-contained.
-6. `az container show` — verifies both containers are in running state.
-
-### Required GitHub secrets and variables
-
-| Name                    | Type     | Notes                                      |
-| ----------------------- | -------- | ------------------------------------------ |
-| `AZURE_CLIENT_ID`       | Secret   | OIDC app registration client ID            |
-| `AZURE_TENANT_ID`       | Secret   | Azure tenant ID                            |
-| `AZURE_SUBSCRIPTION_ID` | Secret   | Azure subscription ID                      |
-| `CF_API_TOKEN`          | Secret   | Cloudflare Zone:DNS:Edit token             |
-| `CF_ZONE_ID`            | Secret   | Cloudflare zone ID for the public hostname |
-| `ACR_USERNAME`          | Secret   | ACR admin username (auto-set post-apply)   |
-| `ACR_PASSWORD`          | Secret   | ACR admin password (auto-set post-apply)   |
-| `ACR_REGISTRY`          | Variable | ACR login server URL (auto-set post-apply) |
-| `ACME_EMAIL`            | Variable | Let's Encrypt registration email           |
-| `DEPLOY_IMAGE_TAG`      | Variable | Optional steady-state deploy tag override  |
-
-**First-run bootstrap:** `ACR_*` don't exist before the first apply (ACR hasn't been
-created yet), so `build-push` will fail initially. Run only the `deploy` job first
-(using `image_tag=latest`), then subsequent full-pipeline runs work end-to-end automatically.
-
-### No manual applies
-
-**Never run `tofu apply` locally against production state.** All applies go through
-`deploy.yaml`. Safe read-only commands: `tofu show`, `tofu output`, `tofu plan`.
-
----
-
-## OpenAPI Spec (`specs/openapi/blog-api.yaml`)
-
-Documents the HTTP contract of the `training-log` Sinatra app.
-
-- **Format:** OpenAPI 3.1.0
-- **Auth:** `sessionCookie` (rack.session cookie)
-- **Base URL:** `https://gym.digitaldelirium.tech`
-- **Linted by Spectral** on every push — must pass before any image is built.
-
-When routes change in `training-log/workouts.rb`, update this spec in the same PR.
-Treat it as a binding contract — a spec that passes lint but mismatches the app is still wrong.
+## Commands Commonly Used Here
 
 ```bash
-npm install -g @stoplight/spectral-cli
-spectral lint specs/openapi/blog-api.yaml --ruleset @stoplight/spectral-oas
+cd infra/opentofu/azure
+tofu init -backend=false
+tofu validate
+tofu plan \
+  -var="ghcr_pat=$GHCR_PAT" \
+  -var="cf_api_token=$CF_API_TOKEN" \
+  -var="cloudflare_zone_id=$CF_ZONE_ID" \
+  -var="acme_email=$ACME_EMAIL"
 ```
 
----
-
-## Relationship to `training-log` Repo
-
-| Concern                         | Repo                              |
-| ------------------------------- | --------------------------------- |
-| Application code (Ruby/Sinatra) | `westrachel/training-log`         |
-| Unit / integration / e2e tests  | `westrachel/training-log`         |
-| Docker image CI smoke build     | `westrachel/training-log`         |
-| Docker image push to ACR        | **This repo** (`build-push` job)  |
-| Azure infrastructure            | **This repo** (`main.tf`)         |
-| OpenAPI contract                | **This repo** (`blog-api.yaml`)   |
-| TLS / DNS configuration         | **This repo** (Caddy + Tofu vars) |
-
-The `training-log` repo has no knowledge of Azure. This repo pulls the image it just
-built (tagged with `github.sha`) and passes that tag to `tofu apply`.
-
----
-
-## Code Quality Guidelines
-
-- **No secrets in source.** Sensitive values go in GitHub secrets or Key Vault only.
-- `tofu validate` must pass locally; include `tofu plan` output in PR descriptions for infra changes.
-- **ACR admin creds** are used because ACI + `azurerm ~> 3.x` does not support managed
-  identity for image pull. When migrating to Container Apps or `azurerm ~> 4.x`, switch
-  to managed identity.
-- **Pin Caddy to a specific tag** once the setup is stable — avoid `latest` in production.
-- Resource names with `substr(subscription_id, 0, 8)` are deterministic per subscription.
-  Document any new auto-named resources in this file.
-- VPN configs in `infra/terraform/vpn/openvpn-config/` are **static reference files** —
-  not managed by Tofu. Do not modify without understanding the on-prem network topology.
+Use these as inspection and validation commands. Production applies should go through GitHub Actions unless the user explicitly asks otherwise.

@@ -17,10 +17,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Spectral (OpenAPI linter)
-        run: npm install -g @stoplight/spectral-cli
+        run: |
+          npm install -g @stoplight/spectral-cli
+          npm install @stoplight/spectral-rulesets
 
       - name: Validate OpenAPI spec
-        run: spectral lint specs/openapi/blog-api.yaml --ruleset @stoplight/spectral-oas
+        run: spectral lint specs/openapi/blog-api.yaml
 
 
   deploy:

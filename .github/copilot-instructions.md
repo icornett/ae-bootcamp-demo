@@ -9,6 +9,24 @@ pushes it to ACR, then runs `tofu apply` — all automatically on push to `main`
 
 ---
 
+## Agent Usage
+
+- Use agent customizations in `.github/agents/` for task-specific workflows.
+- Use `.github/agents/tdd-workflow.agent.md` for strict Test-Driven Development (Red-Green-Refactor) workflows.
+- Keep core repository standards and deployment guidance in this file.
+- Use the memory system below to capture active discoveries and durable learnings.
+
+## Memory System
+
+- Persistent Memory: This file (`.github/copilot-instructions.md`) contains foundational principles and workflows.
+- Working Memory: `.github/memory/` directory contains discoveries and patterns.
+- During active development, take notes in `.github/memory/scratch/working-notes.md` (not committed).
+- At end of session, summarize key findings into `.github/memory/session-notes.md` (committed).
+- Document recurring code patterns in `.github/memory/patterns-discovered.md` (committed).
+- Reference these files when providing context-aware suggestions.
+
+---
+
 ## Directory Layout
 
 ```
@@ -36,7 +54,7 @@ workout-blog/
 ## Tech Stack
 
 | Layer       | Technology                                               |
-|-------------|----------------------------------------------------------|
+| ----------- | -------------------------------------------------------- |
 | IaC         | OpenTofu >= 1.6 (`tofu` CLI)                             |
 | Provider    | `azurerm ~> 3.90` + `random ~> 3.6`                      |
 | Compute     | Azure Container Instance (multi-container group)         |
@@ -109,17 +127,17 @@ State is currently **local**. Before adding collaborators or running from multip
 
 ### Variables
 
-| Variable              | Default                    | Notes                                           |
-|-----------------------|----------------------------|-------------------------------------------------|
-| `resource_group_name` | `workout-blog`             |                                                 |
-| `location`            | `northcentralus`           |                                                 |
-| `acr_name`            | *(auto-generated)*         | Override if name taken by another tenant        |
-| `pg_admin_login`      | `pgadmin`                  |                                                 |
-| `pg_database_name`    | `training_log`             |                                                 |
-| `image_tag`           | `latest`                   | Set to `github.sha` by CI                       |
-| `domain`              | `gym.digitaldelirium.tech` | DNS A record must point to ACI public IP        |
-| `acme_email`          | *(required)*               | Let's Encrypt registration email                |
-| `cf_api_token`        | *(required, sensitive)*    | Cloudflare Zone:DNS:Edit token                  |
+| Variable              | Default                    | Notes                                    |
+| --------------------- | -------------------------- | ---------------------------------------- |
+| `resource_group_name` | `workout-blog`             |                                          |
+| `location`            | `northcentralus`           |                                          |
+| `acr_name`            | _(auto-generated)_         | Override if name taken by another tenant |
+| `pg_admin_login`      | `pgadmin`                  |                                          |
+| `pg_database_name`    | `training_log`             |                                          |
+| `image_tag`           | `latest`                   | Set to `github.sha` by CI                |
+| `domain`              | `gym.digitaldelirium.tech` | DNS A record must point to ACI public IP |
+| `acme_email`          | _(required)_               | Let's Encrypt registration email         |
+| `cf_api_token`        | _(required, sensitive)_    | Cloudflare Zone:DNS:Edit token           |
 
 Supply `acme_email` via the `ACME_EMAIL` GitHub Actions variable and `cf_api_token`
 via the `CF_API_TOKEN` secret. **Never commit sensitive values.**
@@ -172,7 +190,7 @@ Uses OIDC via `azure/login@v2` — no long-lived Azure credentials stored in Git
 permissions:
   id-token: write
   contents: read
-  secrets: write   # needed for gh secret set to bootstrap ACR creds
+  secrets: write # needed for gh secret set to bootstrap ACR creds
 ```
 
 Steps:
@@ -189,7 +207,7 @@ Steps:
 ### Required GitHub secrets and variables
 
 | Name                    | Type     | Notes                                      |
-|-------------------------|----------|--------------------------------------------|
+| ----------------------- | -------- | ------------------------------------------ |
 | `AZURE_CLIENT_ID`       | Secret   | OIDC app registration client ID            |
 | `AZURE_TENANT_ID`       | Secret   | Azure tenant ID                            |
 | `AZURE_SUBSCRIPTION_ID` | Secret   | Azure subscription ID                      |
@@ -231,15 +249,15 @@ spectral lint specs/openapi/blog-api.yaml --ruleset @stoplight/spectral-oas
 
 ## Relationship to `training-log` Repo
 
-| Concern                          | Repo                              |
-|----------------------------------|-----------------------------------|
-| Application code (Ruby/Sinatra)  | `westrachel/training-log`         |
-| Unit / integration / e2e tests   | `westrachel/training-log`         |
-| Docker image CI smoke build      | `westrachel/training-log`         |
-| Docker image push to ACR         | **This repo** (`build-push` job)  |
-| Azure infrastructure             | **This repo** (`main.tf`)         |
-| OpenAPI contract                 | **This repo** (`blog-api.yaml`)   |
-| TLS / DNS configuration          | **This repo** (Caddy + Tofu vars) |
+| Concern                         | Repo                              |
+| ------------------------------- | --------------------------------- |
+| Application code (Ruby/Sinatra) | `westrachel/training-log`         |
+| Unit / integration / e2e tests  | `westrachel/training-log`         |
+| Docker image CI smoke build     | `westrachel/training-log`         |
+| Docker image push to ACR        | **This repo** (`build-push` job)  |
+| Azure infrastructure            | **This repo** (`main.tf`)         |
+| OpenAPI contract                | **This repo** (`blog-api.yaml`)   |
+| TLS / DNS configuration         | **This repo** (Caddy + Tofu vars) |
 
 The `training-log` repo has no knowledge of Azure. This repo pulls the image it just
 built (tagged with `github.sha`) and passes that tag to `tofu apply`.

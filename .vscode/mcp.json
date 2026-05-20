@@ -1,0 +1,14 @@
+{
+	"servers": {
+		"@azure/mcp": {
+			"command": "npx",
+			"args": [
+				"@azure/mcp@3.0.0-beta.6",
+				"server",
+				"start"
+			],
+			"type": "stdio"
+		}
+	},
+	"inputs": []
+}

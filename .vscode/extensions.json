@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "shopify.ruby-extensions-pack",
+        "Shopify.vscode-ruby-lsp",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-docker",
+        "ms-azuretools.vscode-azureterraform",
+        "ms-vscode.azurecli"
+    ]
+}

@@ -1,4 +1,5 @@
 terraform {
+  # OpenTofu >= 1.6 (the `terraform {}` block is valid in OpenTofu for backwards compatibility)
   required_version = ">= 1.6"
   required_providers {
     azurerm = {
@@ -16,24 +17,6 @@ provider "azurerm" {
   features {}
 }
 
-variable "resource_group_name" {
-  default = "workout-blog"
-}
-
-variable "location" {
-  # North Central US: cheapest D2ls_v5 spot (~$0.016/hr) — Cloudflare masks origin latency
-  default = "northcentralus"
-}
-
-variable "acr_name" {
-  description = "Override ACR name — must be globally unique, alphanumeric only. Defaults to auto-generated name."
-  default     = ""
-}
-
-variable "pg_admin_login" {
-  default = "pgadmin"
-}
-
 # Auto-generated — never stored in CI secrets or tfvars
 resource "random_password" "pg" {
   length           = 20
@@ -45,29 +28,6 @@ resource "random_password" "pg" {
   min_special      = 2
 }
 
-variable "pg_database_name" {
-  default = "training_log"
-}
-
-variable "image_tag" {
-  description = "Docker image tag to deploy — set to git SHA in CI"
-  default     = "latest"
-}
-
-variable "domain" {
-  description = "Public hostname for the blog (DNS A record must point to ACI public IP)"
-  default     = "gym.digitaldelirium.tech"
-}
-
-variable "acme_email" {
-  description = "Email for Let's Encrypt ACME registration"
-}
-
-variable "cf_api_token" {
-  description = "Cloudflare API token with Zone:DNS:Edit permission (for DNS-01 ACME challenge)"
-  sensitive   = true
-}
-
 data "azurerm_client_config" "current" {}
 
 resource "azurerm_resource_group" "main" {
@@ -75,7 +35,6 @@ resource "azurerm_resource_group" "main" {
   location = var.location
 }
 
-# ── Key Vault ─────────────────────────────────────────────────────────────────
 resource "azurerm_key_vault" "main" {
   name                        = "workout-kv-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
   resource_group_name         = azurerm_resource_group.main.name
@@ -92,16 +51,6 @@ resource "azurerm_key_vault" "main" {
   }
 }
 
-# ── Container Registry ────────────────────────────────────────────────────────
-resource "azurerm_container_registry" "main" {
-  name                = local.acr_name
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
-  sku                 = "Basic"
-  admin_enabled       = true
-}
-
-# ── PostgreSQL Flexible Server (public endpoint, SSL enforced) ─────────────────
 resource "azurerm_postgresql_flexible_server" "main" {
   name                   = "workout-pg-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
   resource_group_name    = azurerm_resource_group.main.name
@@ -163,10 +112,6 @@ resource "azurerm_storage_share" "caddy_data" {
 }
 
 locals {
-  # Use override if provided, otherwise generate a unique name from subscription ID.
-  # ACR names are globally unique and alphanumeric only (5–50 chars).
-  acr_name = var.acr_name != "" ? var.acr_name : "workoutblog${replace(substr(data.azurerm_client_config.current.subscription_id, 0, 12), "-", "")}"
-
   # Written to /etc/caddy/Caddyfile at container startup via command override.
   # CF_API_TOKEN injected as env var so it never appears in logs or config files.
   caddyfile_content = <<-CADDYFILE
@@ -190,9 +135,9 @@ resource "azurerm_container_group" "blog" {
   restart_policy      = "Always"
 
   image_registry_credential {
-    server   = azurerm_container_registry.main.login_server
-    username = azurerm_container_registry.main.admin_username
-    password = azurerm_container_registry.main.admin_password
+    server   = "ghcr.io"
+    username = "icornett"
+    password = var.ghcr_pat
   }
 
   # Caddy sidecar — terminates TLS via Let's Encrypt DNS-01 (Cloudflare), proxies to Sinatra
@@ -238,7 +183,7 @@ resource "azurerm_container_group" "blog" {
   # Sinatra app — listens on localhost:4567, not exposed publicly
   container {
     name   = "training-log"
-    image  = "${azurerm_container_registry.main.login_server}/training-log:${var.image_tag}"
+    image  = "ghcr.io/icornett/training-log:${var.image_tag}"
     cpu    = "0.25"
     memory = "0.5"
 
@@ -251,39 +196,4 @@ resource "azurerm_container_group" "blog" {
       DATABASE_URL = azurerm_key_vault_secret.database_url.value
     }
   }
-}
-
-# ── Outputs ───────────────────────────────────────────────────────────────────
-output "aci_fqdn" {
-  value       = azurerm_container_group.blog.fqdn
-  description = "ACI public FQDN — set Cloudflare DNS A record to its IP, proxy enabled, SSL Full (Strict)"
-}
-
-output "aci_public_ip" {
-  value       = azurerm_container_group.blog.ip_address
-  description = "Point Cloudflare DNS A record for ${var.domain} at this IP"
-}
-
-output "pg_server_fqdn" {
-  value       = azurerm_postgresql_flexible_server.main.fqdn
-  description = "PostgreSQL public FQDN — initialize schema with schema.sql after first apply"
-}
-
-output "acr_login_server" {
-  value = azurerm_container_registry.main.login_server
-}
-
-output "acr_admin_username" {
-  value     = azurerm_container_registry.main.admin_username
-  sensitive = true
-}
-
-output "acr_admin_password" {
-  value     = azurerm_container_registry.main.admin_password
-  sensitive = true
-}
-
-output "key_vault_name" {
-  value       = azurerm_key_vault.main.name
-  description = "Key Vault storing DATABASE_URL"
 }

@@ -1,0 +1,24 @@
+{
+    // ── Colima (replaces Docker Desktop) ───────────────────────────────────────
+    // Full paths required: VS Code launched from the Dock doesn't inherit
+    // /opt/homebrew/bin from the shell. Active Docker context "colima" (set via
+    // `docker context use colima`) supplies the socket — no docker.host needed.
+    "dev.containers.dockerPath": "/opt/homebrew/bin/docker",
+    "dev.containers.dockerComposePath": "/opt/homebrew/lib/docker/cli-plugins/docker-compose",
+    // ── Ruby ───────────────────────────────────────────────────────────────────
+    "ruby.useBundler": true,
+    "ruby.lint": {
+        "rubocop": {
+            "useBundler": true
+        }
+    },
+    "editor.formatOnSave": true,
+    "[ruby]": {
+        "editor.defaultFormatter": "Shopify.vscode-ruby-lsp"
+    },
+    // ── OpenTofu ───────────────────────────────────────────────────────────────
+    "[terraform]": {
+        "editor.defaultFormatter": "gamunu.opentofu"
+    },
+    "opentofu.languageServer.enable": true
+}

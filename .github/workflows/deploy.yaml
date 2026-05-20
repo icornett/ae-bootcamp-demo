@@ -3,6 +3,12 @@ name: Deploy Training Log
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Optional published container tag to deploy instead of the commit SHA
+        required: false
+        default: ""
   pull_request:
     branches: [main]
 
@@ -23,7 +29,6 @@ jobs:
 
       - name: Validate OpenAPI spec
         run: spectral lint specs/openapi/blog-api.yaml
-
 
   deploy:
     name: Deploy via Tofu
@@ -53,7 +58,6 @@ jobs:
       - name: Tofu Init
         run: tofu init
 
-
       # Multi-container group (Caddy + Sinatra) requires Terraform/Tofu —
       # az container create CLI only supports single-container groups.
       - name: Tofu Apply
@@ -63,13 +67,26 @@ jobs:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          WORKFLOW_IMAGE_TAG: ${{ inputs.image_tag }}
+          DEFAULT_IMAGE_TAG: ${{ vars.DEPLOY_IMAGE_TAG }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
         run: |
+          IMAGE_TAG="${{ github.sha }}"
+
+          if [ -n "$DEFAULT_IMAGE_TAG" ]; then
+            IMAGE_TAG="$DEFAULT_IMAGE_TAG"
+          fi
+
+          if [ -n "$WORKFLOW_IMAGE_TAG" ]; then
+            IMAGE_TAG="$WORKFLOW_IMAGE_TAG"
+          fi
+
           tofu apply -auto-approve \
-            -var="image_tag=${{ github.sha }}" \
+            -var="image_tag=$IMAGE_TAG" \
             -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
+            -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
             -var="acme_email=${{ vars.ACME_EMAIL }}" \
             -var="ghcr_pat=${{ secrets.GHCR_PAT }}"
-
 
       - name: Verify container group is running
         run: |
@@ -78,4 +95,3 @@ jobs:
             --name training-log \
             --query "containers[].{name:name,state:instanceView.currentState.state}" \
             --output table
-

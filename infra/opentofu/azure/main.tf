@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.90"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.0"
+    }
     random = {
       source  = "hashicorp/random"
       version = "~> 3.6"
@@ -15,6 +19,10 @@ terraform {
 
 provider "azurerm" {
   features {}
+}
+
+provider "cloudflare" {
+  api_token = var.cf_api_token
 }
 
 # Auto-generated — never stored in CI secrets or tfvars
@@ -36,13 +44,13 @@ resource "azurerm_resource_group" "main" {
 }
 
 resource "azurerm_key_vault" "main" {
-  name                        = "workout-kv-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
-  resource_group_name         = azurerm_resource_group.main.name
-  location                    = azurerm_resource_group.main.location
-  tenant_id                   = data.azurerm_client_config.current.tenant_id
-  sku_name                    = "standard"
-  soft_delete_retention_days  = 7
-  purge_protection_enabled    = false
+  name                       = "workout-kv-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
+  resource_group_name        = azurerm_resource_group.main.name
+  location                   = azurerm_resource_group.main.location
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  sku_name                   = "standard"
+  soft_delete_retention_days = 7
+  purge_protection_enabled   = false
 
   access_policy {
     tenant_id          = data.azurerm_client_config.current.tenant_id
@@ -106,9 +114,9 @@ resource "azurerm_storage_account" "caddy" {
 }
 
 resource "azurerm_storage_share" "caddy_data" {
-  name               = "caddy-data"
-  storage_account_id = azurerm_storage_account.caddy.id
-  quota              = 1
+  name                 = "caddy-data"
+  storage_account_name = azurerm_storage_account.caddy.name
+  quota                = 1
 }
 
 locals {
@@ -195,5 +203,19 @@ resource "azurerm_container_group" "blog" {
     secure_environment_variables = {
       DATABASE_URL = azurerm_key_vault_secret.database_url.value
     }
+  }
+}
+
+resource "cloudflare_dns_record" "blog" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.domain
+  type    = "A"
+  ttl     = 1
+  content = azurerm_container_group.blog.ip_address
+  proxied = true
+  comment = "Managed by OpenTofu for the training-log origin"
+
+  settings = {
+    ipv4_only = true
   }
 }

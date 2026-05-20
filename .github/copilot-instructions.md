@@ -127,20 +127,22 @@ State is currently **local**. Before adding collaborators or running from multip
 
 ### Variables
 
-| Variable              | Default                    | Notes                                    |
-| --------------------- | -------------------------- | ---------------------------------------- |
-| `resource_group_name` | `workout-blog`             |                                          |
-| `location`            | `northcentralus`           |                                          |
-| `acr_name`            | _(auto-generated)_         | Override if name taken by another tenant |
-| `pg_admin_login`      | `pgadmin`                  |                                          |
-| `pg_database_name`    | `training_log`             |                                          |
-| `image_tag`           | `latest`                   | Set to `github.sha` by CI                |
-| `domain`              | `gym.digitaldelirium.tech` | DNS A record must point to ACI public IP |
-| `acme_email`          | _(required)_               | Let's Encrypt registration email         |
-| `cf_api_token`        | _(required, sensitive)_    | Cloudflare Zone:DNS:Edit token           |
+| Variable              | Default                    | Notes                                            |
+| --------------------- | -------------------------- | ------------------------------------------------ |
+| `resource_group_name` | `workout-blog`             |                                                  |
+| `location`            | `northcentralus`           |                                                  |
+| `acr_name`            | _(auto-generated)_         | Override if name taken by another tenant         |
+| `pg_admin_login`      | `pgadmin`                  |                                                  |
+| `pg_database_name`    | `training_log`             |                                                  |
+| `image_tag`           | `latest`                   | Defaults to latest; CI can pin any published tag |
+| `domain`              | `gym.digitaldelirium.tech` | Managed as a proxied Cloudflare A record         |
+| `cloudflare_zone_id`  | _(required)_               | Cloudflare zone ID that owns `domain`            |
+| `acme_email`          | _(required)_               | Let's Encrypt registration email                 |
+| `cf_api_token`        | _(required, sensitive)_    | Cloudflare token with DNS RW + Zone Read         |
 
 Supply `acme_email` via the `ACME_EMAIL` GitHub Actions variable and `cf_api_token`
-via the `CF_API_TOKEN` secret. **Never commit sensitive values.**
+via the `CF_API_TOKEN` secret. Supply `cloudflare_zone_id` via the `CF_ZONE_ID`
+secret. **Never commit sensitive values.**
 
 ### ACR naming
 
@@ -198,7 +200,7 @@ Steps:
 1. Azure OIDC login.
 2. `tofu init` (working-directory: `infra/terraform/azure`).
 3. **ACR name check** — `az acr check-name` before apply; fails fast if taken by another tenant.
-4. `tofu apply -auto-approve` with `image_tag`, `cf_api_token`, `acme_email` vars.
+4. `tofu apply -auto-approve` with `image_tag`, `cloudflare_zone_id`, `cf_api_token`, `acme_email` vars.
 5. **Bootstrap ACR credentials** — reads `acr_login_server`, `acr_admin_username`,
    `acr_admin_password` from tofu outputs; writes to GitHub secrets/vars via `gh secret set`
    using `GITHUB_TOKEN`. Subsequent runs are fully self-contained.
@@ -212,10 +214,12 @@ Steps:
 | `AZURE_TENANT_ID`       | Secret   | Azure tenant ID                            |
 | `AZURE_SUBSCRIPTION_ID` | Secret   | Azure subscription ID                      |
 | `CF_API_TOKEN`          | Secret   | Cloudflare Zone:DNS:Edit token             |
+| `CF_ZONE_ID`            | Secret   | Cloudflare zone ID for the public hostname |
 | `ACR_USERNAME`          | Secret   | ACR admin username (auto-set post-apply)   |
 | `ACR_PASSWORD`          | Secret   | ACR admin password (auto-set post-apply)   |
 | `ACR_REGISTRY`          | Variable | ACR login server URL (auto-set post-apply) |
 | `ACME_EMAIL`            | Variable | Let's Encrypt registration email           |
+| `DEPLOY_IMAGE_TAG`      | Variable | Optional steady-state deploy tag override  |
 
 **First-run bootstrap:** `ACR_*` don't exist before the first apply (ACR hasn't been
 created yet), so `build-push` will fail initially. Run only the `deploy` job first

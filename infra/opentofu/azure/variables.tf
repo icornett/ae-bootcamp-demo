@@ -21,13 +21,17 @@ variable "pg_database_name" {
 }
 
 variable "image_tag" {
-  description = "Docker image tag to deploy — set to git SHA in CI"
+  description = "Docker image tag to deploy — defaults to latest, but CI can pin any published tag"
   default     = "latest"
 }
 
 variable "domain" {
-  description = "Public hostname for the blog (DNS A record must point to ACI public IP)"
+  description = "Public hostname for the blog (managed as a proxied Cloudflare A record)"
   default     = "gym.digitaldelirium.tech"
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare zone ID that owns var.domain"
 }
 
 variable "acme_email" {
@@ -35,6 +39,6 @@ variable "acme_email" {
 }
 
 variable "cf_api_token" {
-  description = "Cloudflare API token with Zone:DNS:Edit permission (for DNS-01 ACME challenge)"
+  description = "Cloudflare API token with DNS read/write access and zone read access"
   sensitive   = true
 }

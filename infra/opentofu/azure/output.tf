@@ -1,12 +1,17 @@
 # ── Outputs ───────────────────────────────────────────────────────────────────
 output "aci_fqdn" {
   value       = azurerm_container_group.blog.fqdn
-  description = "ACI public FQDN — set Cloudflare DNS A record to its IP, proxy enabled, SSL Full (Strict)"
+  description = "ACI public FQDN backing the Cloudflare-managed hostname"
 }
 
 output "aci_public_ip" {
   value       = azurerm_container_group.blog.ip_address
-  description = "Point Cloudflare DNS A record for gym.digitaldelirium.tech at this IP"
+  description = "Origin IP used by the Cloudflare DNS record"
+}
+
+output "cloudflare_record_hostname" {
+  value       = cloudflare_dns_record.blog.name
+  description = "Cloudflare DNS hostname managed by OpenTofu"
 }
 
 output "pg_server_fqdn" {

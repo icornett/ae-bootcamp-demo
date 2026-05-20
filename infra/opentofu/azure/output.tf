@@ -6,7 +6,7 @@ output "aci_fqdn" {
 
 output "aci_public_ip" {
   value       = azurerm_container_group.blog.ip_address
-  description = "Point Cloudflare DNS A record for ${var.domain} at this IP"
+  description = "Point Cloudflare DNS A record for gym.digitaldelirium.tech at this IP"
 }
 
 output "pg_server_fqdn" {

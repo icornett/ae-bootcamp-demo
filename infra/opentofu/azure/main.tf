@@ -1,6 +1,15 @@
 terraform {
   # OpenTofu >= 1.6 (the `terraform {}` block is valid in OpenTofu for backwards compatibility)
   required_version = ">= 1.6"
+
+  backend "azurerm" {
+    resource_group_name  = "tf-backend"
+    storage_account_name = "icornettblogbackend"
+    container_name       = "tfstate"
+    key                  = "workout-blog.tfstate"
+    use_azuread_auth     = true
+  }
+
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -38,6 +47,16 @@ resource "random_password" "pg" {
 
 data "azurerm_client_config" "current" {}
 
+data "azurerm_storage_account" "backend" {
+  name                = "icornettblogbackend"
+  resource_group_name = "tf-backend"
+}
+
+data "azurerm_key_vault" "existing_main" {
+  name                = "workout-kv-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
+  resource_group_name = var.resource_group_name
+}
+
 resource "azurerm_resource_group" "main" {
   name     = var.resource_group_name
   location = var.location
@@ -57,6 +76,12 @@ resource "azurerm_key_vault" "main" {
     object_id          = data.azurerm_client_config.current.object_id
     secret_permissions = ["Get", "Set", "Delete", "List", "Purge"]
   }
+}
+
+resource "azurerm_role_assignment" "current_keyvault_secrets_user" {
+  scope                = data.azurerm_key_vault.existing_main.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = data.azurerm_client_config.current.object_id
 }
 
 resource "azurerm_postgresql_flexible_server" "main" {

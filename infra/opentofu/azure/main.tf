@@ -138,6 +138,14 @@ resource "azurerm_storage_share" "caddy_data" {
   quota                = 1
 }
 
+resource "azurerm_log_analytics_workspace" "main" {
+  name                = "workout-law-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  sku                 = "PerGB2018"
+  retention_in_days   = var.log_analytics_retention_days
+}
+
 locals {
   # Written to /etc/caddy/Caddyfile at container startup via command override.
   # CF_API_TOKEN injected as env var so it never appears in logs or config files.
@@ -160,6 +168,14 @@ resource "azurerm_container_group" "blog" {
   dns_name_label      = "workout-blog-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
   os_type             = "Linux"
   restart_policy      = "Always"
+
+  diagnostics {
+    log_analytics {
+      workspace_id  = azurerm_log_analytics_workspace.main.workspace_id
+      workspace_key = azurerm_log_analytics_workspace.main.primary_shared_key
+      log_type      = "ContainerInsights"
+    }
+  }
 
   image_registry_credential {
     server   = "ghcr.io"

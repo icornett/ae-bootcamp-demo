@@ -28,3 +28,13 @@ output "key_vault_name" {
   value       = azurerm_key_vault.main.name
   description = "Key Vault storing DATABASE_URL"
 }
+
+output "log_analytics_workspace_name" {
+  value       = azurerm_log_analytics_workspace.main.name
+  description = "Log Analytics workspace collecting ACI diagnostics"
+}
+
+output "log_analytics_workspace_id" {
+  value       = azurerm_log_analytics_workspace.main.workspace_id
+  description = "Workspace ID used for querying ACI container logs"
+}

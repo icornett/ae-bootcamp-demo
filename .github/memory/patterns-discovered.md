@@ -61,3 +61,37 @@ Related files:
 
 - blog/workouts.rb
 - blog/spec/unit
+
+---
+
+### Pattern: ACI diagnostics to Log Analytics
+
+Context:
+
+- Infrastructure for the production `training-log` multi-container Azure Container Instance group.
+
+Problem:
+
+- ACI runtime logs are transient when only queried directly from the container group, making historical troubleshooting difficult.
+
+Solution:
+
+- Provision an `azurerm_log_analytics_workspace` and attach it in `azurerm_container_group.diagnostics.log_analytics` with `log_type = "ContainerInsights"`.
+
+Example:
+
+```hcl
+diagnostics {
+ log_analytics {
+  workspace_id  = azurerm_log_analytics_workspace.main.workspace_id
+  workspace_key = azurerm_log_analytics_workspace.main.primary_shared_key
+  log_type      = "ContainerInsights"
+ }
+}
+```
+
+Related files:
+
+- infra/opentofu/azure/main.tf
+- infra/opentofu/azure/variables.tf
+- infra/opentofu/azure/output.tf

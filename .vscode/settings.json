@@ -20,5 +20,10 @@
     "[terraform]": {
         "editor.defaultFormatter": "gamunu.opentofu"
     },
-    "opentofu.languageServer.enable": true
+    "opentofu.languageServer.enable": true,
+    "chat.mcp.serverSampling": {
+        "workout-blog/.vscode/mcp.json: @azure/mcp": {
+            "allowedDuringChat": true
+        }
+    }
 }

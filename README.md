@@ -51,7 +51,7 @@ The Azure module currently accepts these inputs:
 
 | Variable | Default | Required | Purpose |
 | --- | --- | --- | --- |
-| `resource_group_name` | `workout-blog` | No | Azure resource group name |
+| `resource_group_name` | `icornett-ae-workout-blog` | No | Azure resource group name |
 | `location` | `northcentralus` | No | Azure region for all deployed resources |
 | `ghcr_pat` | none | Yes | GitHub token with `read:packages` so ACI can pull from GHCR |
 | `pg_admin_login` | `pgadmin` | No | PostgreSQL admin username |

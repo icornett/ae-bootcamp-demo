@@ -7,6 +7,11 @@ variable "location" {
   default = "northcentralus"
 }
 
+variable "log_analytics_retention_days" {
+  description = "Log Analytics workspace retention period in days for ACI logs"
+  default     = 30
+}
+
 variable "ghcr_pat" {
   description = "GitHub PAT with read:packages scope — used by ACI to pull the private GHCR image"
   sensitive   = true

@@ -95,6 +95,7 @@ The currently deployed stack is defined by `infra/opentofu/azure/main.tf`.
 - Database: Azure PostgreSQL Flexible Server 16
 - Secrets: Azure Key Vault
 - Persistent cert storage: Azure Storage Account and Azure File Share
+- Observability: Azure Log Analytics Workspace wired to ACI diagnostics
 - DNS: Cloudflare proxied `A` record
 - Image source: `ghcr.io/icornett/training-log`
 
@@ -120,7 +121,7 @@ Image tag precedence in `.github/workflows/deploy.yaml`:
 
 1. Manual `workflow_dispatch` input `image_tag`
 2. Repository variable `DEPLOY_IMAGE_TAG`
-3. `github.sha`
+3. `latest`
 
 ## Working Conventions
 

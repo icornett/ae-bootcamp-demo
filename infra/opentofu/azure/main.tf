@@ -78,12 +78,6 @@ resource "azurerm_key_vault" "main" {
   }
 }
 
-resource "azurerm_role_assignment" "current_keyvault_secrets_user" {
-  scope                = data.azurerm_key_vault.existing_main.id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = data.azurerm_client_config.current.object_id
-}
-
 resource "azurerm_postgresql_flexible_server" "main" {
   name                   = "workout-pg-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
   resource_group_name    = azurerm_resource_group.main.name

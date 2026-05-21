@@ -71,7 +71,7 @@ jobs:
           DEFAULT_IMAGE_TAG: ${{ vars.DEPLOY_IMAGE_TAG }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
         run: |
-          IMAGE_TAG="${{ github.sha }}"
+          IMAGE_TAG="latest"
 
           if [ -n "$DEFAULT_IMAGE_TAG" ]; then
             IMAGE_TAG="$DEFAULT_IMAGE_TAG"

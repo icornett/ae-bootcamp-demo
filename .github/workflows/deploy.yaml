@@ -110,7 +110,7 @@ jobs:
       - name: Verify container group is running
         run: |
           az container show \
-            --resource-group workout-blog \
+            --resource-group icornett-ae-workout-blog \
             --name training-log \
             --query "containers[].{name:name,state:instanceView.currentState.state}" \
             --output table

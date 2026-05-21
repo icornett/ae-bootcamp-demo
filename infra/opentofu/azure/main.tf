@@ -233,8 +233,4 @@ resource "cloudflare_dns_record" "blog" {
   content = azurerm_container_group.blog.ip_address
   proxied = true
   comment = "Managed by OpenTofu for the training-log origin"
-
-  settings = {
-    ipv4_only = true
-  }
 }

@@ -35,3 +35,13 @@ import {
   to = azurerm_storage_share.caddy_data
   id = "https://workoutcaddy37081a3e.file.core.windows.net/caddy-data"
 }
+
+import {
+  to = azurerm_key_vault_secret.database_url
+  id = "https://workout-kv-37081a3e.vault.azure.net/secrets/database-url/9a25d61597714998ada4a7be1a2cd90e"
+}
+
+import {
+  to = azurerm_key_vault_secret.pg_password
+  id = "https://workout-kv-37081a3e.vault.azure.net/secrets/pg-admin-password/fd638a282f984a8cbeb3333f5feb8209"
+}

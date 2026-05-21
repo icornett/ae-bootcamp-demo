@@ -1,5 +1,5 @@
 variable "resource_group_name" {
-  default = "workout-blog"
+  default = "icornett-ae-workout-blog"
 }
 
 variable "location" {

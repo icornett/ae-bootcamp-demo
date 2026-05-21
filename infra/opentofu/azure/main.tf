@@ -237,6 +237,7 @@ resource "azurerm_container_group" "blog" {
 
     secure_environment_variables = {
       DATABASE_URL = azurerm_key_vault_secret.database_url.value
+      DB_SSLMODE   = "require"
     }
   }
 }

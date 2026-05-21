@@ -125,6 +125,21 @@ Database seeding behavior:
 
 This protects deploys from re-running non-idempotent seed inserts on every release.
 
+## GHCR latest change hooks
+
+There are now two ways this repository detects GHCR latest digest changes:
+
+- Local Git hook: `.githooks/pre-push` runs `scripts/check-ghcr-latest-digest.sh` and reports whether `ghcr.io/icornett/training-log:latest` changed since the last push.
+- ACI automation hook: `.github/workflows/aci-refresh-on-ghcr-latest.yaml` runs every 15 minutes (and on manual trigger), detects digest changes, and restarts the `training-log` ACI container group when a new digest is published.
+
+Local setup:
+
+```bash
+./bin/setup-hooks
+```
+
+Hook state is stored in `.git/ghcr/latest.digest`.
+
 ## Local commands
 
 Useful commands when working on the infrastructure module:

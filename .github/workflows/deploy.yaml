@@ -89,6 +89,23 @@ jobs:
             -var="acme_email=${{ vars.ACME_EMAIL }}" \
             -var="ghcr_pat=${{ secrets.GHCR_PAT }}"
 
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Seed PostgreSQL schema
+        run: |
+          KEY_VAULT_NAME="$(tofu output -raw key_vault_name)"
+          DATABASE_URL="$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name database-url --query value -o tsv)"
+          SCHEMA_EXISTS="$(psql "$DATABASE_URL" -tAc "SELECT to_regclass('public.users') IS NOT NULL;")"
+
+          if [ "$SCHEMA_EXISTS" = "t" ]; then
+            echo "Schema already present. Skipping seed."
+          else
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$GITHUB_WORKSPACE/blog/schema.sql"
+          fi
+
       - name: Verify container group is running
         run: |
           az container show \

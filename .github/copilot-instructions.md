@@ -107,7 +107,8 @@ The current deployment flow is:
 2. Log in to Azure with OIDC.
 3. Run `tofu init` in `infra/opentofu/azure/`.
 4. Run `tofu apply` with workflow-provided variables.
-5. Verify the ACI container group state.
+5. Seed `blog/schema.sql` only when the PostgreSQL schema does not yet exist.
+6. Verify the ACI container group state.
 
 Important current behavior:
 

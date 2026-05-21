@@ -89,6 +89,7 @@ Workflow behavior:
 - Pull requests and pushes run OpenAPI validation.
 - Pushes to `main` run the deploy job.
 - `workflow_dispatch` can manually trigger a deployment with an optional `image_tag` input.
+- After `tofu apply`, deployment installs `postgresql-client` and runs `blog/schema.sql` only if the `users` table is not present.
 
 Required GitHub secrets:
 
@@ -114,6 +115,15 @@ Image tag selection order in the workflow:
 3. `github.sha`
 
 This lets you keep the environment pinned to `latest`, move to a release tag, or deploy a one-off SHA without editing the Tofu module.
+
+Database seeding behavior:
+
+1. Read `key_vault_name` from OpenTofu output.
+2. Read `database-url` from Key Vault.
+3. Check `to_regclass('public.users')`.
+4. Run `blog/schema.sql` only when the schema is missing.
+
+This protects deploys from re-running non-idempotent seed inserts on every release.
 
 ## Local commands
 

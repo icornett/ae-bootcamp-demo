@@ -33,5 +33,5 @@ import {
 
 import {
   to = azurerm_storage_share.caddy_data
-  id = "/subscriptions/37081a3e-42d1-4416-ab97-18f723c2c292/resourceGroups/icornett-ae-workout-blog/providers/Microsoft.Storage/storageAccounts/workoutcaddy37081a3e/fileServices/default/shares/caddy-data"
+  id = "https://workoutcaddy37081a3e.file.core.windows.net/caddy-data"
 }

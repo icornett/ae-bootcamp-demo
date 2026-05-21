@@ -154,7 +154,7 @@ resource "azurerm_container_group" "blog" {
     name   = "caddy"
     image  = "ghcr.io/caddy-dns/cloudflare:latest"
     cpu    = "0.25"
-    memory = "0.25"
+    memory = "0.3"
 
     ports {
       port     = 443

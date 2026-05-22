@@ -3,18 +3,13 @@ variable "resource_group_name" {
 }
 
 variable "location" {
-  # North Central US: cheapest D2ls_v5 spot (~$0.016/hr) — Cloudflare masks origin latency
+  # North Central US — existing PostgreSQL/Key Vault location; SWA is pinned to centralus separately
   default = "northcentralus"
 }
 
 variable "log_analytics_retention_days" {
-  description = "Log Analytics workspace retention period in days for ACI logs"
+  description = "Retention period in days for workspace-based Function telemetry"
   default     = 30
-}
-
-variable "ghcr_pat" {
-  description = "GitHub PAT with read:packages scope — used by ACI to pull the private GHCR image"
-  sensitive   = true
 }
 
 variable "pg_admin_login" {
@@ -25,22 +20,13 @@ variable "pg_database_name" {
   default = "training_log"
 }
 
-variable "image_tag" {
-  description = "Docker image tag to deploy — defaults to latest, but CI can pin any published tag"
-  default     = "latest"
-}
-
 variable "domain" {
-  description = "Public hostname for the blog (managed as a proxied Cloudflare A record)"
+  description = "Public hostname for the blog (managed as a proxied Cloudflare CNAME record to SWA)"
   default     = "gym.digitaldelirium.tech"
 }
 
 variable "cloudflare_zone_id" {
   description = "Cloudflare zone ID that owns var.domain"
-}
-
-variable "acme_email" {
-  description = "Email for Let's Encrypt ACME registration"
 }
 
 variable "cf_api_token" {

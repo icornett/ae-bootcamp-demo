@@ -45,6 +45,11 @@ resource "random_password" "pg" {
   min_special      = 2
 }
 
+resource "random_password" "session_secret" {
+  length  = 48
+  special = false
+}
+
 data "azurerm_client_config" "current" {}
 
 data "azurerm_storage_account" "backend" {
@@ -92,7 +97,7 @@ resource "azurerm_postgresql_flexible_server" "main" {
   geo_redundant_backup_enabled = false
 }
 
-# "0.0.0.0" start+end = Allow Azure services (ACI, etc.) — SSL still enforced
+# "0.0.0.0" start+end = Allow Azure services (SWA Functions, etc.) — SSL still enforced
 resource "azurerm_postgresql_flexible_server_firewall_rule" "azure_services" {
   name             = "allow-azure-services"
   server_id        = azurerm_postgresql_flexible_server.main.id
@@ -123,19 +128,12 @@ resource "azurerm_key_vault_secret" "pg_password" {
   tags = { managed-by = "terraform" }
 }
 
-# ── Caddy cert storage (persists certs across ACI restarts → avoids LE rate limits) ──
-resource "azurerm_storage_account" "caddy" {
-  name                     = "workoutcaddy${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
-  resource_group_name      = azurerm_resource_group.main.name
-  location                 = azurerm_resource_group.main.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-}
+resource "azurerm_key_vault_secret" "session_secret" {
+  name         = "session-secret"
+  value        = random_password.session_secret.result
+  key_vault_id = azurerm_key_vault.main.id
 
-resource "azurerm_storage_share" "caddy_data" {
-  name                 = "caddy-data"
-  storage_account_name = azurerm_storage_account.caddy.name
-  quota                = 1
+  tags = { managed-by = "terraform" }
 }
 
 resource "azurerm_log_analytics_workspace" "main" {
@@ -146,108 +144,39 @@ resource "azurerm_log_analytics_workspace" "main" {
   retention_in_days   = var.log_analytics_retention_days
 }
 
-locals {
-  # Written to /etc/caddy/Caddyfile at container startup via command override.
-  # CF_API_TOKEN injected as env var so it never appears in logs or config files.
-  caddyfile_content = <<-CADDYFILE
-    ${var.domain} {
-      tls ${var.acme_email} {
-        dns cloudflare {env.CF_API_TOKEN}
-      }
-      reverse_proxy localhost:4567
-    }
-  CADDYFILE
-}
-
-# ── Azure Container Instance — Caddy sidecar + Sinatra app ────────────────────
-resource "azurerm_container_group" "blog" {
-  name                = "training-log"
+resource "azurerm_application_insights" "functions" {
+  name                = "workout-ai-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
-  ip_address_type     = "Public"
-  dns_name_label      = "workout-blog-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
-  os_type             = "Linux"
-  restart_policy      = "Always"
+  application_type    = "web"
+  workspace_id        = azurerm_log_analytics_workspace.main.id
+}
 
-  diagnostics {
-    log_analytics {
-      workspace_id  = azurerm_log_analytics_workspace.main.workspace_id
-      workspace_key = azurerm_log_analytics_workspace.main.primary_shared_key
-      log_type      = "ContainerInsights"
-    }
-  }
+# ── Azure Static Web App — React/Vite SPA + managed Azure Functions v4 API ───
+# Location must be one of the SWA-supported regions; northcentralus is not supported.
+resource "azurerm_static_web_app" "main" {
+  name                = "workout-swa-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = "centralus"
+  sku_tier            = "Standard"
+  sku_size            = "Standard"
 
-  image_registry_credential {
-    server   = "ghcr.io"
-    username = "icornett"
-    password = var.ghcr_pat
-  }
-
-  # Caddy sidecar — terminates TLS via Let's Encrypt DNS-01 (Cloudflare), proxies to Sinatra
-  # ghcr.io/caddy-dns/cloudflare includes the Cloudflare ACME DNS plugin
-  container {
-    name   = "caddy"
-    image  = "ghcr.io/caddy-dns/cloudflare:latest"
-    cpu    = "0.25"
-    memory = "0.3"
-
-    ports {
-      port     = 443
-      protocol = "TCP"
-    }
-
-    # Port 80 for HTTP→HTTPS redirect (Caddy handles this automatically)
-    ports {
-      port     = 80
-      protocol = "TCP"
-    }
-
-    # Write Caddyfile from env var at startup, then start Caddy
-    commands = ["/bin/sh", "-c", "printf '%s' \"$CADDYFILE\" > /etc/caddy/Caddyfile && caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
-
-    environment_variables = {
-      CADDYFILE = local.caddyfile_content
-    }
-
-    secure_environment_variables = {
-      CF_API_TOKEN = var.cf_api_token
-    }
-
-    # Persist ACME certs/keys — prevents LE rate-limit hits on container restart
-    volume {
-      name                 = "caddy-data"
-      mount_path           = "/data"
-      share_name           = azurerm_storage_share.caddy_data.name
-      storage_account_name = azurerm_storage_account.caddy.name
-      storage_account_key  = azurerm_storage_account.caddy.primary_access_key
-    }
-  }
-
-  # Sinatra app — listens on localhost:4567, not exposed publicly
-  container {
-    name   = "training-log"
-    image  = "ghcr.io/icornett/training-log:${var.image_tag}"
-    cpu    = "0.25"
-    memory = "0.5"
-
-    environment_variables = {
-      RACK_ENV = "production"
-      PORT     = "4567"
-    }
-
-    secure_environment_variables = {
-      DATABASE_URL = azurerm_key_vault_secret.database_url.value
-      DB_SSLMODE   = "require"
-    }
+  # Injected into managed Functions at runtime
+  app_settings = {
+    DATABASE_URL                          = azurerm_key_vault_secret.database_url.value
+    SESSION_SECRET                        = random_password.session_secret.result
+    APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.functions.connection_string
+    APPINSIGHTS_INSTRUMENTATIONKEY        = azurerm_application_insights.functions.instrumentation_key
   }
 }
 
+# Cloudflare CNAME → SWA default hostname; Cloudflare handles edge TLS/CDN
 resource "cloudflare_dns_record" "blog" {
   zone_id = var.cloudflare_zone_id
   name    = var.domain
-  type    = "A"
+  type    = "CNAME"
   ttl     = 1
-  content = azurerm_container_group.blog.ip_address
+  content = azurerm_static_web_app.main.default_host_name
   proxied = true
-  comment = "Managed by OpenTofu for the training-log origin"
+  comment = "Managed by OpenTofu — proxied Cloudflare CNAME to SWA origin"
 }

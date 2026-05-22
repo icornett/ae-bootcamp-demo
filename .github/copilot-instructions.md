@@ -2,16 +2,14 @@
 
 ## Repo Purpose
 
-This workspace is centered on the infrastructure and deployment automation for the
-`training-log` application.
+This workspace is centered on infrastructure and deployment automation for the `training-log` application.
 
 - Infrastructure is defined in `infra/opentofu/azure/`.
 - Deployment is orchestrated by `.github/workflows/deploy.yaml`.
 - The application source is present in `blog/`.
 - The API contract lives in `specs/openapi/blog-api.yaml`.
 
-When working in this repository, treat infrastructure and deployment changes as the
-default concern unless the task explicitly targets files under `blog/`.
+When working in this repository, treat infrastructure and deployment changes as the default concern unless the task explicitly targets files under `blog/`.
 
 ## Current Repository Layout
 
@@ -24,9 +22,10 @@ workout-blog/
 │   └── workflows/
 ├── blog/
 │   ├── .github/
-│   ├── workouts.rb
+│   ├── api/
+│   ├── src/
 │   ├── schema.sql
-│   └── README.md
+│   └── package.json
 ├── infra/
 │   └── opentofu/
 │       ├── azure/
@@ -55,8 +54,7 @@ These agents are available in `.github/agents/` for the infrastructure workspace
 ### App-level agents
 
 The application subtree in `blog/` has its own Copilot customizations under `blog/.github/`.
-If the task is primarily about the Sinatra application, check those app-specific agents and
-instructions before adding duplicate behavior at the root.
+If the task is primarily about the web app or API code, check those app-specific agents and instructions before adding duplicate behavior at the root.
 
 ### Guidance for agent selection
 
@@ -90,54 +88,49 @@ The currently deployed stack is defined by `infra/opentofu/azure/main.tf`.
 
 - IaC: OpenTofu >= 1.6
 - Providers: `hashicorp/azurerm ~> 3.90`, `hashicorp/random ~> 3.6`, `cloudflare/cloudflare ~> 5.0`
-- Compute: Azure Container Instance multi-container group
-- Reverse proxy and TLS: Caddy with Cloudflare DNS challenge
+- Frontend/API hosting: Azure Static Web App (Standard tier) with managed Azure Functions
 - Database: Azure PostgreSQL Flexible Server 16
 - Secrets: Azure Key Vault
-- Persistent cert storage: Azure Storage Account and Azure File Share
-- Observability: Azure Log Analytics Workspace wired to ACI diagnostics
-- DNS: Cloudflare proxied `A` record
-- Image source: `ghcr.io/icornett/training-log`
+- Observability: Azure Application Insights backed by Azure Log Analytics Workspace
+- DNS: Cloudflare CNAME record for the app domain
 
 ## Deployment Reality
 
-Do not rely on older assumptions about ACR or a separate image build job in this repo.
+Do not rely on older assumptions about ACI, Caddy, GHCR image polling, or image tags.
 The current deployment flow is:
 
 1. Validate the OpenAPI spec.
-2. Log in to Azure with OIDC.
+2. Log in to Azure.
 3. Run `tofu init` in `infra/opentofu/azure/`.
-4. Run `tofu apply` with workflow-provided variables.
-5. Seed `blog/schema.sql` only when the PostgreSQL schema does not yet exist.
-6. Verify the ACI container group state.
+4. Apply infrastructure and DNS with custom-domain creation disabled.
+5. Wait for DNS propagation.
+6. Apply custom-domain binding.
+7. Wait for Azure custom-domain status to become `Ready`.
+8. Apply again with Cloudflare proxy enabled.
+9. Seed `blog/schema.sql` only when the PostgreSQL schema does not yet exist.
+10. Deploy `blog/` and `blog/api/` with `Azure/static-web-apps-deploy@v1`.
 
 Important current behavior:
 
-- The application image is pulled from GHCR, not Azure Container Registry.
 - Cloudflare DNS is managed in OpenTofu.
-- The deployed image tag is selectable.
-
-Image tag precedence in `.github/workflows/deploy.yaml`:
-
-1. Manual `workflow_dispatch` input `image_tag`
-2. Repository variable `DEPLOY_IMAGE_TAG`
-3. `latest`
+- Custom domain binding is explicitly staged to avoid DNS propagation races.
+- SWA deploy token is sourced from OpenTofu output `swa_api_key`.
 
 ## Working Conventions
 
 ### For infrastructure changes
 
 - Make infrastructure edits in `infra/opentofu/azure/`.
-- Keep changes minimal and aligned with the current provider versions.
+- Keep changes minimal and aligned with current provider versions.
 - Run `tofu validate` after editing the module.
 - Use `tofu plan` for inspection when needed.
 - Do not introduce Azure resources that contradict the current architecture without updating `README.md` and this file.
 
 ### For deployment changes
 
-- Keep `.github/workflows/deploy.yaml` aligned with the actual OpenTofu variables.
-- When adding a required variable or secret, update both `README.md` and this file.
-- Prefer explicit workflow inputs and repository variables over hardcoded deployment choices.
+- Keep `.github/workflows/deploy.yaml` aligned with actual OpenTofu variables.
+- When adding or removing required variables or secrets, update both `README.md` and this file.
+- Prefer staged applies over single-pass apply for custom-domain flows.
 
 ### For application changes under `blog/`
 
@@ -146,7 +139,7 @@ Image tag precedence in `.github/workflows/deploy.yaml`:
 
 ## Documentation Rules
 
-When the infrastructure shape changes, update the relevant documentation in the same change:
+When infrastructure shape changes, update the relevant documentation in the same change:
 
 - `README.md` for human-facing infrastructure overview
 - `.github/copilot-instructions.md` for Copilot-facing repo guidance
@@ -173,10 +166,10 @@ cd infra/opentofu/azure
 tofu init -backend=false
 tofu validate
 tofu plan \
-  -var="ghcr_pat=$GHCR_PAT" \
   -var="cf_api_token=$CF_API_TOKEN" \
   -var="cloudflare_zone_id=$CF_ZONE_ID" \
-  -var="acme_email=$ACME_EMAIL"
+  -var="cloudflare_proxied=false" \
+  -var="enable_custom_domain=false"
 ```
 
 Use these as inspection and validation commands. Production applies should go through GitHub Actions unless the user explicitly asks otherwise.

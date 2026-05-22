@@ -4,6 +4,16 @@ output "swa_default_hostname" {
   description = "SWA origin hostname — used as the Cloudflare CNAME target"
 }
 
+output "swa_name" {
+  value       = azurerm_static_web_app.main.name
+  description = "Static Web App resource name"
+}
+
+output "resource_group_name" {
+  value       = azurerm_resource_group.main.name
+  description = "Primary resource group name"
+}
+
 output "swa_api_key" {
   value       = azurerm_static_web_app.main.api_key
   sensitive   = true

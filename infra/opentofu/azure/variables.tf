@@ -29,6 +29,11 @@ variable "cloudflare_zone_id" {
   description = "Cloudflare zone ID that owns var.domain"
 }
 
+variable "cloudflare_proxied" {
+  description = "Whether the Cloudflare CNAME should be proxied. Keep false until SWA custom domain validation completes."
+  default     = false
+}
+
 variable "cf_api_token" {
   description = "Cloudflare API token with DNS read/write access and zone read access"
   sensitive   = true

@@ -61,7 +61,8 @@ jobs:
         run: |
           tofu plan -out=tfplan \
             -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
-            -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID"
+            -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
+            -var="cloudflare_proxied=false"
 
           tofu show -no-color tfplan > plan.txt
 
@@ -102,7 +103,7 @@ jobs:
           ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: tofu init
 
-      - name: Tofu Apply
+      - name: Tofu Apply (Domain Validation Phase)
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -111,7 +112,48 @@ jobs:
         run: |
           tofu apply -auto-approve \
             -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
-            -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID"
+            -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
+            -var="cloudflare_proxied=false"
+
+      - name: Wait For SWA Custom Domain Validation
+        run: |
+          SWA_NAME="$(tofu output -raw swa_name)"
+          RG_NAME="$(tofu output -raw resource_group_name)"
+          DOMAIN_NAME="$(tofu output -raw cloudflare_record_hostname)"
+
+          echo "Waiting for custom domain '$DOMAIN_NAME' to reach Ready state..."
+
+          for i in {1..40}; do
+            STATUS="$(az staticwebapp hostname show \
+              --name "$SWA_NAME" \
+              --resource-group "$RG_NAME" \
+              --hostname "$DOMAIN_NAME" \
+              --query status \
+              --output tsv 2>/dev/null || true)"
+
+            if [ "$STATUS" = "Ready" ]; then
+              echo "Custom domain is Ready."
+              exit 0
+            fi
+
+            echo "Attempt $i/40: status='$STATUS' (waiting 15s)"
+            sleep 15
+          done
+
+          echo "Custom domain validation did not reach Ready state in time."
+          exit 1
+
+      - name: Tofu Apply (Enable Cloudflare Proxy)
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          tofu apply -auto-approve \
+            -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
+            -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
+            -var="cloudflare_proxied=true"
 
       - name: Install PostgreSQL client
         run: |

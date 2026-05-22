@@ -170,13 +170,22 @@ resource "azurerm_static_web_app" "main" {
   }
 }
 
-# Cloudflare CNAME → SWA default hostname; Cloudflare handles edge TLS/CDN
+resource "azurerm_static_web_app_custom_domain" "blog" {
+  static_web_app_id = azurerm_static_web_app.main.id
+  domain_name       = var.domain
+  validation_type   = "cname-delegation"
+
+  depends_on = [cloudflare_dns_record.blog]
+}
+
+# Cloudflare CNAME → SWA default hostname.
+# Keep this DNS-only until Azure custom-domain validation completes.
 resource "cloudflare_dns_record" "blog" {
   zone_id = var.cloudflare_zone_id
   name    = var.domain
   type    = "CNAME"
   ttl     = 1
   content = azurerm_static_web_app.main.default_host_name
-  proxied = true
-  comment = "Managed by OpenTofu — proxied Cloudflare CNAME to SWA origin"
+  proxied = var.cloudflare_proxied
+  comment = "Managed by OpenTofu — CNAME for SWA custom-domain routing"
 }

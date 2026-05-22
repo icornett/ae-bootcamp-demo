@@ -171,6 +171,7 @@ resource "azurerm_static_web_app" "main" {
 }
 
 resource "azurerm_static_web_app_custom_domain" "blog" {
+  count             = var.enable_custom_domain ? 1 : 0
   static_web_app_id = azurerm_static_web_app.main.id
   domain_name       = var.domain
   validation_type   = "cname-delegation"

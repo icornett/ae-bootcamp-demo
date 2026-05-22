@@ -34,6 +34,11 @@ variable "cloudflare_proxied" {
   default     = false
 }
 
+variable "enable_custom_domain" {
+  description = "Whether to create the Azure Static Web App custom-domain binding"
+  default     = false
+}
+
 variable "cf_api_token" {
   description = "Cloudflare API token with DNS read/write access and zone read access"
   sensitive   = true

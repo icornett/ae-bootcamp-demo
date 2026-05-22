@@ -136,6 +136,22 @@ resource "azurerm_key_vault_secret" "session_secret" {
   tags = { managed-by = "terraform" }
 }
 
+resource "azurerm_log_analytics_workspace" "main" {
+  name                = "workout-law-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  sku                 = "PerGB2018"
+  retention_in_days   = var.log_analytics_retention_days
+}
+
+resource "azurerm_application_insights" "functions" {
+  name                = "workout-ai-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  application_type    = "web"
+  workspace_id        = azurerm_log_analytics_workspace.main.id
+}
+
 # ── Azure Static Web App — React/Vite SPA + managed Azure Functions v4 API ───
 # Location must be one of the SWA-supported regions; northcentralus is not supported.
 resource "azurerm_static_web_app" "main" {
@@ -147,8 +163,10 @@ resource "azurerm_static_web_app" "main" {
 
   # Injected into managed Functions at runtime
   app_settings = {
-    DATABASE_URL   = azurerm_key_vault_secret.database_url.value
-    SESSION_SECRET = random_password.session_secret.result
+    DATABASE_URL                          = azurerm_key_vault_secret.database_url.value
+    SESSION_SECRET                        = random_password.session_secret.result
+    APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.functions.connection_string
+    APPINSIGHTS_INSTRUMENTATIONKEY        = azurerm_application_insights.functions.instrumentation_key
   }
 }
 

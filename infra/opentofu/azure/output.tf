@@ -24,3 +24,19 @@ output "key_vault_name" {
   value       = azurerm_key_vault.main.name
   description = "Key Vault storing DATABASE_URL and SESSION_SECRET"
 }
+
+output "application_insights_name" {
+  value       = azurerm_application_insights.functions.name
+  description = "Application Insights resource collecting managed Functions telemetry"
+}
+
+output "application_insights_connection_string" {
+  value       = azurerm_application_insights.functions.connection_string
+  sensitive   = true
+  description = "Connection string injected into SWA Functions runtime"
+}
+
+output "log_analytics_workspace_id" {
+  value       = azurerm_log_analytics_workspace.main.workspace_id
+  description = "Workspace ID backing Application Insights for log queries"
+}

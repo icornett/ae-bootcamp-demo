@@ -7,6 +7,11 @@ variable "location" {
   default = "northcentralus"
 }
 
+variable "log_analytics_retention_days" {
+  description = "Retention period in days for workspace-based Function telemetry"
+  default     = 30
+}
+
 variable "pg_admin_login" {
   default = "pgadmin"
 }

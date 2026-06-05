@@ -139,6 +139,32 @@ jobs:
           echo "DNS propagation did not complete in time."
           exit 1
 
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Seed PostgreSQL schema
+        run: |
+          KEY_VAULT_NAME="$(tofu output -raw key_vault_name)"
+          DATABASE_URL="$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name database-url --query value -o tsv)"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$GITHUB_WORKSPACE/blog/schema.sql"
+
+      - name: Get SWA deployment token
+        id: swa_token
+        run: echo "token=$(tofu output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Static Web App
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: blog
+          api_location: blog/api
+          api_build_command: npm run build
+          output_location: dist
+
       - name: Wait For SWA Custom Domain Validation
         run: |
           SWA_NAME="$(tofu output -raw swa_name)"
@@ -166,32 +192,6 @@ jobs:
 
           echo "Custom domain validation did not reach Ready state in time."
           exit 1
-
-      - name: Install PostgreSQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-
-      - name: Seed PostgreSQL schema
-        run: |
-          KEY_VAULT_NAME="$(tofu output -raw key_vault_name)"
-          DATABASE_URL="$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name database-url --query value -o tsv)"
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$GITHUB_WORKSPACE/blog/schema.sql"
-
-      - name: Get SWA deployment token
-        id: swa_token
-        run: echo "token=$(tofu output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy to Static Web App
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          action: upload
-          app_location: blog
-          api_location: blog/api
-          api_build_command: npm run build
-          output_location: dist
 
       - name: Tofu Apply (Enable Cloudflare Proxy)
         env:

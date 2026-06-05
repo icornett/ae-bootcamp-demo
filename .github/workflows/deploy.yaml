@@ -160,7 +160,7 @@ jobs:
 
           echo "Waiting for custom domain '$DOMAIN_NAME' to reach Ready state..."
 
-          for i in {1..40}; do
+          for i in {1..60}; do
             STATUS="$(az staticwebapp hostname show \
               --name "$SWA_NAME" \
               --resource-group "$RG_NAME" \
@@ -173,7 +173,7 @@ jobs:
               exit 0
             fi
 
-            echo "Attempt $i/40: status='$STATUS' (waiting 15s)"
+            echo "Attempt $i/60: status='$STATUS' (waiting 15s)"
             sleep 15
           done
 

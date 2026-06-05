@@ -208,6 +208,7 @@ jobs:
         id: swa_token
         run: echo "token=$(tofu output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
 
+
       - name: Deploy to Static Web App
         uses: Azure/static-web-apps-deploy@v1
         with:

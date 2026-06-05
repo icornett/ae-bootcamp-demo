@@ -197,6 +197,6 @@ resource "cloudflare_dns_record" "blog_validation" {
   name    = split(".", var.domain)[0]
   type    = "TXT"
   ttl     = 1
-  content = "${azurerm_static_web_app_custom_domain.blog[0].validation_token}"
+  content = format("\"%s\"", azurerm_static_web_app_custom_domain.blog[0].validation_token)
   comment = "Managed by OpenTofu — SWA custom-domain TXT validation token"
 }

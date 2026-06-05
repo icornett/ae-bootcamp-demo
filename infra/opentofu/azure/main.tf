@@ -174,9 +174,7 @@ resource "azurerm_static_web_app_custom_domain" "blog" {
   count             = var.enable_custom_domain ? 1 : 0
   static_web_app_id = azurerm_static_web_app.main.id
   domain_name       = var.domain
-  validation_type   = "cname-delegation"
-
-  depends_on = [cloudflare_dns_record.blog]
+  validation_type   = "dns-txt-token"
 }
 
 # Cloudflare CNAME → SWA default hostname.
@@ -189,4 +187,16 @@ resource "cloudflare_dns_record" "blog" {
   content = azurerm_static_web_app.main.default_host_name
   proxied = var.cloudflare_proxied
   comment = "Managed by OpenTofu — CNAME for SWA custom-domain routing"
+}
+
+# Azure returns a domain verification token for SWA custom-domain binding.
+# Publish it in Cloudflare to automate TXT-based domain validation.
+resource "cloudflare_dns_record" "blog_validation" {
+  count   = var.enable_custom_domain ? 1 : 0
+  zone_id = var.cloudflare_zone_id
+  name    = "_dnsauth.${var.domain}"
+  type    = "TXT"
+  ttl     = 1
+  content = azurerm_static_web_app_custom_domain.blog[0].validation_token
+  comment = "Managed by OpenTofu — SWA custom-domain TXT validation token"
 }

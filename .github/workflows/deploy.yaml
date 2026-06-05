@@ -104,7 +104,7 @@ jobs:
           ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: tofu init
 
-      - name: Tofu Apply (Provision Infrastructure and DNS)
+      - name: Tofu Apply (Provision Infrastructure + Bind Custom Domain)
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -115,7 +115,7 @@ jobs:
             -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
             -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
             -var="cloudflare_proxied=false" \
-            -var="enable_custom_domain=false"
+            -var="enable_custom_domain=true"
 
       - name: Wait For DNS Propagation
         run: |
@@ -138,19 +138,6 @@ jobs:
 
           echo "DNS propagation did not complete in time."
           exit 1
-
-      - name: Tofu Apply (Bind Custom Domain and Enable Cloudflare Proxy)
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          CLOUDFLARE_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
-        run: |
-          tofu apply -auto-approve \
-            -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
-            -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
-            -var="cloudflare_proxied=true" \
-            -var="enable_custom_domain=true"
 
       - name: Wait For SWA Custom Domain Validation
         run: |
@@ -205,3 +192,16 @@ jobs:
           api_location: blog/api
           api_build_command: npm run build
           output_location: dist
+
+      - name: Tofu Apply (Enable Cloudflare Proxy)
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          tofu apply -auto-approve \
+            -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
+            -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
+            -var="cloudflare_proxied=true" \
+            -var="enable_custom_domain=true"

@@ -68,9 +68,9 @@ jobs:
 
       - name: Update blog submodule to latest main
         run: |
-          git submodule sync --recursive
-          git submodule update --init --remote --recursive blog
-          echo "Using blog submodule commit: $(git -C blog rev-parse --short HEAD)"
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --remote --recursive blog
+          echo "Using blog submodule commit: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2
@@ -126,9 +126,9 @@ jobs:
 
       - name: Update blog submodule to latest main
         run: |
-          git submodule sync --recursive
-          git submodule update --init --remote --recursive blog
-          echo "Using blog submodule commit: $(git -C blog rev-parse --short HEAD)"
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --remote --recursive blog
+          echo "Using blog submodule commit: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2

@@ -1,3 +1,4 @@
 [submodule "blog"]
 	path = blog
 	url = https://github.com/icornett/training-log.git
+	branch = main

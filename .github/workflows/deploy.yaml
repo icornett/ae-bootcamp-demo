@@ -102,7 +102,8 @@ jobs:
             -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
             -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
             -var="cloudflare_proxied=false" \
-            -var="enable_custom_domain=false"
+            -var="enable_custom_domain=false" \
+            -var="manage_blog_validation_record=false"
 
           tofu show -no-color tfplan > plan.txt
 
@@ -164,7 +165,8 @@ jobs:
             -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
             -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
             -var="cloudflare_proxied=false" \
-            -var="enable_custom_domain=true"
+            -var="enable_custom_domain=true" \
+            -var="manage_blog_validation_record=false"
 
       - name: Wait For DNS Propagation
         run: |
@@ -253,4 +255,5 @@ jobs:
             -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
             -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
             -var="cloudflare_proxied=true" \
-            -var="enable_custom_domain=true"
+            -var="enable_custom_domain=true" \
+            -var="manage_blog_validation_record=false"

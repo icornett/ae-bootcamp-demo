@@ -192,11 +192,11 @@ resource "cloudflare_dns_record" "blog" {
 # Azure returns a domain verification token for SWA custom-domain binding.
 # Publish it in Cloudflare to automate TXT-based domain validation.
 resource "cloudflare_dns_record" "blog_validation" {
-  count   = var.enable_custom_domain ? 1 : 0
+  count   = var.enable_custom_domain && var.manage_blog_validation_record ? 1 : 0
   zone_id = var.cloudflare_zone_id
   name    = split(".", var.domain)[0]
   type    = "TXT"
   ttl     = 60
-  content = format("\"%s\"", azurerm_static_web_app_custom_domain.blog[0].validation_token)
+  content = azurerm_static_web_app_custom_domain.blog[0].validation_token
   comment = "Managed by OpenTofu — SWA custom-domain TXT validation token"
 }

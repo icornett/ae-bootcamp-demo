@@ -43,3 +43,9 @@ variable "cf_api_token" {
   description = "Cloudflare API token with DNS read/write access and zone read access"
   sensitive   = true
 }
+
+variable "manage_blog_validation_record" {
+  description = "Whether to manage the Cloudflare TXT record for SWA custom-domain TXT validation. Set to false once the custom domain is validated to stop unnecessary updates."
+  type        = bool
+  default     = true
+}

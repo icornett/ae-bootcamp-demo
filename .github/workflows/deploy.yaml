@@ -36,7 +36,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 25
 
       - name: Install dependencies
         run: npm ci
@@ -204,6 +204,11 @@ jobs:
       - name: Get SWA deployment token
         id: swa_token
         run: echo "token=$(tofu output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
 
       - name: Deploy to Static Web App
         uses: Azure/static-web-apps-deploy@v1

@@ -42,7 +42,7 @@ jobs:
         run: npm ci
 
       - name: Run web tests with coverage (>=80%)
-        run: npm run test:web:coverage
+        run: npm run test:web:ci
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium webkit

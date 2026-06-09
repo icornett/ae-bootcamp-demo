@@ -66,11 +66,15 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update blog submodule to latest main
+      - name: Update blog submodule to latest tag
         run: |
           git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --remote --recursive blog
-          echo "Using blog submodule commit: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
+          git -C "$GITHUB_WORKSPACE/blog" fetch --force --tags origin
+          latest_tag="$(git -C "$GITHUB_WORKSPACE/blog" tag -l --sort=-version:refname | head -n 1)"
+          test -n "$latest_tag"
+          git -C "$GITHUB_WORKSPACE/blog" checkout --force "$latest_tag"
+          echo "Using blog submodule tag: $latest_tag ($(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD))"
 
       - name: Azure Login
         uses: azure/login@v2
@@ -124,11 +128,15 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update blog submodule to latest main
+      - name: Update blog submodule to latest tag
         run: |
           git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --remote --recursive blog
-          echo "Using blog submodule commit: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
+          git -C "$GITHUB_WORKSPACE/blog" fetch --force --tags origin
+          latest_tag="$(git -C "$GITHUB_WORKSPACE/blog" tag -l --sort=-version:refname | head -n 1)"
+          test -n "$latest_tag"
+          git -C "$GITHUB_WORKSPACE/blog" checkout --force "$latest_tag"
+          echo "Using blog submodule tag: $latest_tag ($(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD))"
 
       - name: Azure Login
         uses: azure/login@v2

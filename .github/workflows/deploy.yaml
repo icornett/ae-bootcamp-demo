@@ -228,6 +228,8 @@ jobs:
           api_location: blog/api
           api_build_command: npm run build
           skip_app_build: true
+        env:
+          NODE_VERSION: 25
 
       - name: Wait For SWA Custom Domain Validation
         run: |

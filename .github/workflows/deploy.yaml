@@ -212,16 +212,22 @@ jobs:
         with:
           node-version: 25
 
+      - name: Build web app
+        working-directory: blog
+        run: |
+          npm ci
+          npm run build
+
       - name: Deploy to Static Web App
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
-          app_location: blog
+          app_location: blog/dist
           api_location: blog/api
           api_build_command: npm run build
-          output_location: dist
+          skip_app_build: true
 
       - name: Wait For SWA Custom Domain Validation
         run: |

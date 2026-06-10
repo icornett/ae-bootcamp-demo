@@ -98,7 +98,8 @@ Main deploy phases:
    - `cloudflare_proxied=true`
    - `enable_custom_domain=true`
 6. Seed PostgreSQL schema if needed.
-7. Deploy static site + Functions using `Azure/static-web-apps-deploy@v1`.
+7. Build the Vite app in GitHub Actions with Node 25.
+8. Deploy the prebuilt static site plus Functions using `Azure/static-web-apps-deploy@v1` with app build skipping enabled.
 
 Database seeding behavior:
 

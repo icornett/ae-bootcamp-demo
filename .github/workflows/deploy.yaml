@@ -5,13 +5,84 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, closed]
   repository_dispatch:
     types: [training-log-release]
 
 jobs:
+  release-pr:
+    name: Create Release PR
+    runs-on: ubuntu-latest
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'training-log-release'
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      pull_request_number: ${{ steps.cpr.outputs.pull-request-number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Update blog submodule to release tag
+        env:
+          RELEASE_TAG: ${{ github.event.client_payload.tag }}
+        run: |
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
+          git -C "$GITHUB_WORKSPACE/blog" fetch --force --tags origin
+
+          if [ -n "$RELEASE_TAG" ]; then
+            git -C "$GITHUB_WORKSPACE/blog" checkout --force "$RELEASE_TAG"
+            echo "Using training-log release tag: $RELEASE_TAG"
+          else
+            latest_tag="$(git -C "$GITHUB_WORKSPACE/blog" tag -l 'v[0-9]*' --sort=-version:refname | head -n 1)"
+            test -n "$latest_tag" || { echo "Error: No version tags found in blog submodule"; exit 1; }
+            git -C "$GITHUB_WORKSPACE/blog" checkout --force "$latest_tag"
+            echo "Using fallback latest tag: $latest_tag"
+          fi
+
+      - name: Create pull request
+        id: cpr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update training-log submodule"
+          title: "chore: update training-log release"
+          body: |
+            This PR updates the `blog` submodule to the latest released training-log version.
+
+            - Source tag: `${{ github.event.client_payload.tag }}`
+            - Source SHA: `${{ github.event.client_payload.sha }}`
+            - Source repo: `${{ github.event.client_payload.source_repo }}`
+
+            Auto-merge is enabled; this will merge once required checks pass.
+          branch: "release/training-log-${{ github.event.client_payload.tag || github.run_id }}"
+          delete-branch: true
+          add-paths: |
+            blog
+
+  enable-auto-merge:
+    name: Enable Auto Merge
+    runs-on: ubuntu-latest
+    needs: release-pr
+    if: github.event_name == 'repository_dispatch' && needs.release-pr.outputs.pull_request_number != ''
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - name: Enable auto-merge on release PR
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ needs.release-pr.outputs.pull_request_number }}
+          merge-method: squash
+
   validate-specs:
     name: Validate Specs
     runs-on: ubuntu-latest
+    if: github.event_name != 'repository_dispatch' && (github.event_name != 'pull_request' || github.event.action != 'closed')
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +97,7 @@ jobs:
   web-coverage:
     name: Web Quality Gates
     runs-on: ubuntu-latest
+    if: github.event_name != 'repository_dispatch' && (github.event_name != 'pull_request' || github.event.action != 'closed')
     needs: validate-specs
     defaults:
       run:
@@ -56,7 +128,7 @@ jobs:
     name: Tofu Plan (PR)
     runs-on: ubuntu-latest
     needs: [validate-specs, web-coverage]
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       id-token: write
       contents: read
@@ -115,11 +187,201 @@ jobs:
           name: tofu-plan-${{ github.event.pull_request.number }}
           path: infra/opentofu/azure/plan.txt
 
+  preview-deploy:
+    name: Preview Deploy
+    runs-on: ubuntu-latest
+    needs: [validate-specs, web-coverage]
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    outputs:
+      preview_url: ${{ steps.swa_deploy.outputs.static_web_app_url }}
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: infra/opentofu/azure
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Update blog submodule to latest tag
+        run: |
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
+          git -C "$GITHUB_WORKSPACE/blog" fetch --force --tags origin
+          latest_tag="$(git -C "$GITHUB_WORKSPACE/blog" tag -l 'v[0-9]*' --sort=-version:refname | head -n 1)"
+          test -n "$latest_tag" || { echo "Error: No version tags found in blog submodule"; exit 1; }
+          git -C "$GITHUB_WORKSPACE/blog" checkout --force "$latest_tag"
+          echo "Using blog submodule tag: $latest_tag ($(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD))"
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+
+      - name: Tofu Init
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: tofu init
+
+      - name: Get SWA deployment token
+        id: swa_token
+        run: echo "token=$(tofu output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+
+      - name: Build web app
+        working-directory: blog
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy Preview Environment
+        id: swa_deploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: blog/dist
+          api_location: blog/api
+          api_build_command: npm run build
+          skip_app_build: true
+        env:
+          NODE_VERSION: 25
+
+  real-db-e2e:
+    name: Real DB E2E
+    runs-on: ubuntu-latest
+    needs: preview-deploy
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: infra/opentofu/azure
+    env:
+      BASE_URL: ${{ needs.preview-deploy.outputs.preview_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Update blog submodule to latest tag
+        run: |
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
+          git -C "$GITHUB_WORKSPACE/blog" fetch --force --tags origin
+          latest_tag="$(git -C "$GITHUB_WORKSPACE/blog" tag -l 'v[0-9]*' --sort=-version:refname | head -n 1)"
+          test -n "$latest_tag" || { echo "Error: No version tags found in blog submodule"; exit 1; }
+          git -C "$GITHUB_WORKSPACE/blog" checkout --force "$latest_tag"
+          echo "Using blog submodule tag: $latest_tag ($(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD))"
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+
+      - name: Tofu Init
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: tofu init
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Seed real database for E2E
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          KEY_VAULT_NAME="$(tofu output -raw key_vault_name)"
+          DATABASE_URL="$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name database-url --query value -o tsv)"
+
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$GITHUB_WORKSPACE/blog/schema.sql"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$GITHUB_WORKSPACE/blog/tests/e2e/seed/real-db-seed.sql"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+
+      - name: Install dependencies
+        working-directory: blog
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: blog
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Run real-db Playwright tests
+        working-directory: blog
+        run: npm run test:e2e:real-db
+
+  close-preview:
+    name: Close Preview (Merge/Close)
+    runs-on: ubuntu-latest
+    # pull_request.closed is emitted for both merged PRs and manually closed PRs.
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: infra/opentofu/azure
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+
+      - name: Tofu Init
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: tofu init
+
+      - name: Get SWA deployment token
+        id: swa_token
+        run: echo "token=$(tofu output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
+
+      - name: Close Pull Request Preview
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          action: close
+          azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
+
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
     needs: [validate-specs, web-coverage]
-    if: github.ref == 'refs/heads/main' || github.event_name == 'repository_dispatch'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       id-token: write
       contents: read

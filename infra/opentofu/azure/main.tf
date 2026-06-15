@@ -158,8 +158,8 @@ resource "azurerm_static_web_app" "main" {
   name                = "workout-swa-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
   resource_group_name = azurerm_resource_group.main.name
   location            = "centralus"
-  sku_tier            = "Standard"
-  sku_size            = "Standard"
+  sku_tier            = "Free"
+  sku_size            = "Free"
 
   # Injected into managed Functions at runtime
   app_settings = {

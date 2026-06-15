@@ -341,6 +341,15 @@ jobs:
         working-directory: blog
         run: npm run test:e2e:real-db
 
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: blog/test-results/
+          retention-days: 30
+          compression-level: 9
+
   close-preview:
     name: Close Preview (Merge/Close)
     runs-on: ubuntu-latest

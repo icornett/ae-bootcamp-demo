@@ -84,6 +84,7 @@ Workflow behavior:
 - Pull requests run `tofu plan` with domain/proxy creation disabled.
 - Pull requests from the same repository also deploy to the Azure Static Web Apps preview environment.
 - Pull requests from the same repository also seed a dedicated Playwright user in PostgreSQL and run real-database Playwright journeys against the preview URL.
+- Real-database test results (videos, screenshots, traces) are published as artifacts for inspection.
 - `repository_dispatch` events of type `training-log-release` create/update a release PR and enable auto-merge.
 - Pushes to `main` run a multi-phase deploy sequence to avoid custom-domain race conditions.
 

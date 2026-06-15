@@ -237,7 +237,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 25
+          node-version: 22
 
       - name: Build web app
         working-directory: blog
@@ -257,7 +257,7 @@ jobs:
           api_build_command: npm run build
           skip_app_build: true
         env:
-          NODE_VERSION: 25
+          NODE_VERSION: 22
 
   real-db-e2e:
     name: Real DB E2E
@@ -331,6 +331,11 @@ jobs:
       - name: Install Playwright browsers
         working-directory: blog
         run: npx playwright install --with-deps chromium webkit
+
+      - name: Validate preview URL for real-db tests
+        run: |
+          test -n "$BASE_URL" || { echo "Error: preview URL is empty; cannot run real-db Playwright tests"; exit 1; }
+          echo "Running real-db tests against: $BASE_URL"
 
       - name: Run real-db Playwright tests
         working-directory: blog

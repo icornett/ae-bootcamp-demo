@@ -90,20 +90,16 @@ Workflow behavior:
 
 Main deploy phases:
 
-1. Apply infrastructure and DNS with:
-   - `cloudflare_proxied=false`
-   - `enable_custom_domain=false`
+1. Single Terraform apply with:
+   - `enable_custom_domain=true`
+   - `cloudflare_proxied=true` (enabled by default)
+   - `manage_blog_validation_record=true` (auto-publish TXT token)
 2. Wait for DNS propagation (`dig` CNAME check).
-3. Apply custom-domain binding with:
-   - `cloudflare_proxied=false`
-   - `enable_custom_domain=true`
-4. Wait for Azure hostname status to become `Ready`.
-5. Apply again to enable Cloudflare proxy with:
-   - `cloudflare_proxied=true`
-   - `enable_custom_domain=true`
+3. Build the Vite app in GitHub Actions with Node 25.
+4. Deploy the prebuilt static site plus Functions using `Azure/static-web-apps-deploy@v1` with app build skipping enabled.
+5. Wait for Azure custom-domain binding to reach `Ready` state (handles TXT validation automatically).
 6. Seed PostgreSQL schema if needed.
-7. Build the Vite app in GitHub Actions with Node 25.
-8. Deploy the prebuilt static site plus Functions using `Azure/static-web-apps-deploy@v1` with app build skipping enabled.
+7. Purge Cloudflare cache via API to serve fresh content.
 
 Preview environment notes:
 

@@ -25,6 +25,11 @@ output "cloudflare_record_hostname" {
   description = "Cloudflare DNS hostname managed by OpenTofu"
 }
 
+output "cloudflare_dns_record_id" {
+  value       = cloudflare_dns_record.blog.id
+  description = "Cloudflare DNS record ID — used by Cloudflare API calls in CI/CD"
+}
+
 output "pg_server_fqdn" {
   value       = azurerm_postgresql_flexible_server.main.fqdn
   description = "PostgreSQL public FQDN — initialize schema with schema.sql after first apply"

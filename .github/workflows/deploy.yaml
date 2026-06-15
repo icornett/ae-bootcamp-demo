@@ -442,9 +442,8 @@ jobs:
           tofu apply -auto-approve \
             -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
             -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
-            -var="cloudflare_proxied=false" \
             -var="enable_custom_domain=true" \
-            -var="manage_blog_validation_record=false"
+            -var="manage_blog_validation_record=true"
 
       - name: Wait For DNS Propagation
         run: |
@@ -535,16 +534,18 @@ jobs:
           echo "Custom domain validation did not reach Ready state in time."
           exit 1
 
-      - name: Tofu Apply (Enable Cloudflare Proxy)
+      - name: Purge Cloudflare Cache
         env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          CLOUDFLARE_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
         run: |
-          tofu apply -auto-approve \
-            -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
-            -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
-            -var="cloudflare_proxied=true" \
-            -var="enable_custom_domain=true" \
-            -var="manage_blog_validation_record=false"
+          DOMAIN_NAME="$(tofu output -raw cloudflare_record_hostname)"
+
+          echo "Purging Cloudflare cache for $DOMAIN_NAME..."
+
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"purge_everything": true}' | jq .
+
+          echo "Cache purged."

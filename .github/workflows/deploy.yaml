@@ -107,6 +107,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Update blog submodule to latest main
+        run: |
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
+          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -140,8 +146,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Show checked-in blog submodule revision
-        run: echo "Using blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+      - name: Update blog submodule to latest main
+        run: |
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
+          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2
@@ -198,8 +207,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Show checked-in blog submodule revision
-        run: echo "Using blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+      - name: Update blog submodule to latest main
+        run: |
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
+          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2
@@ -263,8 +275,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Show checked-in blog submodule revision
-        run: echo "Using blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+      - name: Update blog submodule to latest main
+        run: |
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
+          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2
@@ -345,6 +360,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Update blog submodule to latest main
+        run: |
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
+          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -386,8 +407,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Show checked-in blog submodule revision
-        run: echo "Using blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+      - name: Update blog submodule to latest main
+        run: |
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
+          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2

@@ -140,15 +140,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update blog submodule to latest tag
-        run: |
-          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
-          git -C "$GITHUB_WORKSPACE/blog" fetch --force --tags origin
-          latest_tag="$(git -C "$GITHUB_WORKSPACE/blog" tag -l 'v[0-9]*' --sort=-version:refname | head -n 1)"
-          test -n "$latest_tag" || { echo "Error: No version tags found in blog submodule"; exit 1; }
-          git -C "$GITHUB_WORKSPACE/blog" checkout --force "$latest_tag"
-          echo "Using blog submodule tag: $latest_tag ($(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD))"
+      - name: Show checked-in blog submodule revision
+        run: echo "Using blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2
@@ -205,15 +198,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update blog submodule to latest tag
-        run: |
-          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
-          git -C "$GITHUB_WORKSPACE/blog" fetch --force --tags origin
-          latest_tag="$(git -C "$GITHUB_WORKSPACE/blog" tag -l 'v[0-9]*' --sort=-version:refname | head -n 1)"
-          test -n "$latest_tag" || { echo "Error: No version tags found in blog submodule"; exit 1; }
-          git -C "$GITHUB_WORKSPACE/blog" checkout --force "$latest_tag"
-          echo "Using blog submodule tag: $latest_tag ($(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD))"
+      - name: Show checked-in blog submodule revision
+        run: echo "Using blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2
@@ -277,15 +263,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update blog submodule to latest tag
-        run: |
-          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
-          git -C "$GITHUB_WORKSPACE/blog" fetch --force --tags origin
-          latest_tag="$(git -C "$GITHUB_WORKSPACE/blog" tag -l 'v[0-9]*' --sort=-version:refname | head -n 1)"
-          test -n "$latest_tag" || { echo "Error: No version tags found in blog submodule"; exit 1; }
-          git -C "$GITHUB_WORKSPACE/blog" checkout --force "$latest_tag"
-          echo "Using blog submodule tag: $latest_tag ($(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD))"
+      - name: Show checked-in blog submodule revision
+        run: echo "Using blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2
@@ -407,15 +386,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update blog submodule to latest tag
-        run: |
-          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
-          git -C "$GITHUB_WORKSPACE/blog" fetch --force --tags origin
-          latest_tag="$(git -C "$GITHUB_WORKSPACE/blog" tag -l 'v[0-9]*' --sort=-version:refname | head -n 1)"
-          test -n "$latest_tag" || { echo "Error: No version tags found in blog submodule"; exit 1; }
-          git -C "$GITHUB_WORKSPACE/blog" checkout --force "$latest_tag"
-          echo "Using blog submodule tag: $latest_tag ($(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD))"
+      - name: Show checked-in blog submodule revision
+        run: echo "Using blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2

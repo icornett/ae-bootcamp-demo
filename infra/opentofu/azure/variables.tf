@@ -30,13 +30,13 @@ variable "cloudflare_zone_id" {
 }
 
 variable "cloudflare_proxied" {
-  description = "Whether the Cloudflare CNAME should be proxied. Keep false until SWA custom domain validation completes."
-  default     = false
+  description = "Whether the Cloudflare CNAME should be proxied (default: true, disable only for initial domain validation)"
+  default     = true
 }
 
 variable "enable_custom_domain" {
   description = "Whether to create the Azure Static Web App custom-domain binding"
-  default     = false
+  default     = true
 }
 
 variable "cf_api_token" {

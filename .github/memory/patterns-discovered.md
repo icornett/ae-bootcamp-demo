@@ -95,3 +95,44 @@ Related files:
 - infra/opentofu/azure/main.tf
 - infra/opentofu/azure/variables.tf
 - infra/opentofu/azure/output.tf
+
+---
+
+### Pattern: Release dispatch to PR-gated deploy
+
+Context:
+
+- Release notifications from `training-log` arrive through `repository_dispatch` (`training-log-release`) in this infrastructure repo.
+
+Problem:
+
+- Deploying directly on dispatch bypasses PR validation and can promote submodule changes without preview verification.
+
+Solution:
+
+- Handle `repository_dispatch` by creating/updating a release PR and enabling auto-merge.
+- Gate merge on PR checks, including preview deployment and real PostgreSQL Playwright journeys.
+- Deploy only after merge via `push` to `main`.
+- Close preview environments automatically on PR close (including merges).
+
+Example:
+
+```yaml
+on:
+    repository_dispatch:
+        types: [training-log-release]
+
+jobs:
+    release-pr: {}
+    enable-auto-merge: {}
+    preview-deploy: {}
+    real-db-e2e: {}
+    close-preview: {}
+    deploy:
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+```
+
+Related files:
+
+- .github/workflows/deploy.yaml
+- README.md

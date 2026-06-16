@@ -50,6 +50,11 @@ resource "random_password" "session_secret" {
   special = false
 }
 
+resource "random_password" "gdpr_maintenance_token" {
+  length  = 48
+  special = false
+}
+
 data "azurerm_client_config" "current" {}
 
 data "azurerm_storage_account" "backend" {
@@ -136,6 +141,15 @@ resource "azurerm_key_vault_secret" "session_secret" {
   tags = { managed-by = "terraform" }
 }
 
+
+resource "azurerm_key_vault_secret" "gdpr_maintenance_token" {
+  name         = "gdpr-maintenance-token"
+  value        = random_password.gdpr_maintenance_token.result
+  key_vault_id = azurerm_key_vault.main.id
+
+  tags = { managed-by = "terraform" }
+}
+
 resource "azurerm_log_analytics_workspace" "main" {
   name                = "workout-law-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
   location            = azurerm_resource_group.main.location
@@ -158,13 +172,14 @@ resource "azurerm_static_web_app" "main" {
   name                = "workout-swa-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
   resource_group_name = azurerm_resource_group.main.name
   location            = "centralus"
-  sku_tier            = "Standard"
-  sku_size            = "Standard"
+  sku_tier            = "Free"
+  sku_size            = "Free"
 
   # Injected into managed Functions at runtime
   app_settings = {
     DATABASE_URL                          = azurerm_key_vault_secret.database_url.value
     SESSION_SECRET                        = random_password.session_secret.result
+    GDPR_MAINTENANCE_TOKEN                = azurerm_key_vault_secret.gdpr_maintenance_token.value
     APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.functions.connection_string
     APPINSIGHTS_INSTRUMENTATIONKEY        = azurerm_application_insights.functions.instrumentation_key
   }

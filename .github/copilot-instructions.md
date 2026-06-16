@@ -109,12 +109,14 @@ The current deployment flow is:
 8. Apply again with Cloudflare proxy enabled.
 9. Seed `blog/schema.sql` only when the PostgreSQL schema does not yet exist.
 10. Deploy `blog/` and `blog/api/` with `Azure/static-web-apps-deploy@v1`.
+11. Let the scheduled GDPR purge workflow call `/api/admin/purge-deleted-users` with the Key Vault-backed maintenance token.
 
 Important current behavior:
 
 - Cloudflare DNS is managed in OpenTofu.
 - Custom domain binding is explicitly staged to avoid DNS propagation races.
 - SWA deploy token is sourced from OpenTofu output `swa_api_key`.
+- The GDPR purge cron reads `gdpr-maintenance-token` from Key Vault and calls the managed API endpoint directly.
 
 ## Working Conventions
 
@@ -131,6 +133,7 @@ Important current behavior:
 - Keep `.github/workflows/deploy.yaml` aligned with actual OpenTofu variables.
 - When adding or removing required variables or secrets, update both `README.md` and this file.
 - Prefer staged applies over single-pass apply for custom-domain flows.
+- Keep `.github/workflows/purge-deleted-users.yaml` aligned with the Key Vault secret names and the managed API route.
 
 ### For application changes under `blog/`
 

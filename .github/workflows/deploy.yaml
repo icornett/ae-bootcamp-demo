@@ -116,7 +116,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 25
+          node-version: 22
 
       - name: Install dependencies
         run: npm ci
@@ -316,7 +316,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 25
+          node-version: 22
 
       - name: Install dependencies
         working-directory: blog
@@ -388,6 +388,8 @@ jobs:
       - name: Close Pull Request Preview
         uses: Azure/static-web-apps-deploy@v1
         with:
+          app_location: blog/dist
+          api_location: blog/api
           action: close
           azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
 
@@ -500,7 +502,7 @@ jobs:
           api_build_command: npm run build
           skip_app_build: true
         env:
-          NODE_VERSION: 25
+          NODE_VERSION: 22
 
       - name: Wait For SWA Custom Domain Validation
         run: |

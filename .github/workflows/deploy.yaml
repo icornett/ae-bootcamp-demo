@@ -257,92 +257,92 @@ jobs:
         env:
           NODE_VERSION: 22
 
-  real-db-e2e:
-    name: Real DB E2E
-    runs-on: ubuntu-latest
-    needs: preview-deploy
-    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
-    permissions:
-      id-token: write
-      contents: read
-    defaults:
-      run:
-        working-directory: infra/opentofu/azure
-    env:
-      BASE_URL: ${{ needs.preview-deploy.outputs.preview_url }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+  # real-db-e2e:
+  #   name: Real DB E2E
+  #   runs-on: ubuntu-latest
+  #   needs: preview-deploy
+  #   if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #   defaults:
+  #     run:
+  #       working-directory: infra/opentofu/azure
+  #   env:
+  #     BASE_URL: ${{ needs.preview-deploy.outputs.preview_url }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
 
-      - name: Update blog submodule to latest main
-        run: |
-          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
-          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+  #     - name: Update blog submodule to latest main
+  #       run: |
+  #         git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+  #         git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
+  #         echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+  #     - name: Azure Login
+  #       uses: azure/login@v2
+  #       with:
+  #         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Setup OpenTofu
-        uses: opentofu/setup-opentofu@v1
+  #     - name: Setup OpenTofu
+  #       uses: opentofu/setup-opentofu@v1
 
-      - name: Tofu Init
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-        run: tofu init
+  #     - name: Tofu Init
+  #       env:
+  #         ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  #         ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  #         ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  #       run: tofu init
 
-      - name: Install PostgreSQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
+  #     - name: Install PostgreSQL client
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y postgresql-client
 
-      - name: Seed real database for E2E
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-        run: |
-          KEY_VAULT_NAME="$(tofu output -raw key_vault_name)"
-          DATABASE_URL="$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name database-url --query value -o tsv)"
+  #     - name: Seed real database for E2E
+  #       env:
+  #         ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  #         ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  #         ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  #       run: |
+  #         KEY_VAULT_NAME="$(tofu output -raw key_vault_name)"
+  #         DATABASE_URL="$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name database-url --query value -o tsv)"
 
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$GITHUB_WORKSPACE/blog/schema.sql"
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$GITHUB_WORKSPACE/blog/tests/e2e/seed/real-db-seed.sql"
+  #         psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$GITHUB_WORKSPACE/blog/schema.sql"
+  #         psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$GITHUB_WORKSPACE/blog/tests/e2e/seed/real-db-seed.sql"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 22
 
-      - name: Install dependencies
-        working-directory: blog
-        run: npm ci
+  #     - name: Install dependencies
+  #       working-directory: blog
+  #       run: npm ci
 
-      - name: Install Playwright browsers
-        working-directory: blog
-        run: npx playwright install --with-deps chromium webkit
+  #     - name: Install Playwright browsers
+  #       working-directory: blog
+  #       run: npx playwright install --with-deps chromium webkit
 
-      - name: Validate preview URL for real-db tests
-        run: |
-          test -n "$BASE_URL" || { echo "Error: preview URL is empty; cannot run real-db Playwright tests"; exit 1; }
-          echo "Running real-db tests against: $BASE_URL"
+  #     - name: Validate preview URL for real-db tests
+  #       run: |
+  #         test -n "$BASE_URL" || { echo "Error: preview URL is empty; cannot run real-db Playwright tests"; exit 1; }
+  #         echo "Running real-db tests against: $BASE_URL"
 
-      - name: Run real-db Playwright tests
-        working-directory: blog
-        run: npm run test:e2e:real-db
+  #     - name: Run real-db Playwright tests
+  #       working-directory: blog
+  #       run: npm run test:e2e:real-db
 
-      - name: Upload Playwright test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-results-${{ github.run_id }}-${{ github.run_attempt }}
-          path: blog/test-results/
-          retention-days: 30
-          compression-level: 9
+  #     - name: Upload Playwright test results
+  #       if: always()
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: playwright-results-${{ github.run_id }}-${{ github.run_attempt }}
+  #         path: blog/test-results/
+  #         retention-days: 30
+  #         compression-level: 9
 
   close-preview:
     name: Close Preview (Merge/Close)

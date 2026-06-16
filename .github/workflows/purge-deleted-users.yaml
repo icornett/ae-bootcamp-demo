@@ -1,0 +1,71 @@
+name: Purge Deleted Users
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+
+jobs:
+  purge-deleted-users:
+    name: Purge Deleted Users
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: infra/opentofu/azure
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+
+      - name: Tofu Init
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: tofu init
+
+      - name: Invoke purge endpoint
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          HOSTNAME="$(tofu output -raw cloudflare_record_hostname 2>/dev/null || true)"
+
+          if [ -z "$HOSTNAME" ]; then
+            HOSTNAME="$(tofu output -raw swa_default_hostname)"
+          fi
+
+          KEY_VAULT_NAME="$(tofu output -raw key_vault_name)"
+          MAINTENANCE_TOKEN="$(az keyvault secret show \
+            --vault-name "$KEY_VAULT_NAME" \
+            --name gdpr-maintenance-token \
+            --query value \
+            --output tsv)"
+
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "x-gdpr-maintenance-token: $MAINTENANCE_TOKEN" \
+            "https://$HOSTNAME/api/admin/purge-deleted-users")"
+
+          PURGED_COUNT="$(printf '%s' "$RESPONSE" | jq -r '.purgedCount')"
+          CUTOFF_ISO="$(printf '%s' "$RESPONSE" | jq -r '.cutoffIso')"
+
+          {
+            echo "## Purge Deleted Users"
+            echo
+            echo "- Host: https://$HOSTNAME"
+            echo "- Purged users: $PURGED_COUNT"
+            echo "- Retention cutoff: $CUTOFF_ISO"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "$RESPONSE"

@@ -69,7 +69,7 @@ Sensitive inputs:
 | `swa_api_key` | SWA deployment token used by GitHub Actions |
 | `cloudflare_record_hostname` | Public hostname managed by Cloudflare |
 | `pg_server_fqdn` | PostgreSQL server FQDN |
-| `key_vault_name` | Key Vault storing `database-url`, `pg-admin-password`, `session-secret` |
+| `key_vault_name` | Key Vault storing `database-url`, `pg-admin-password`, `session-secret`, and `gdpr-maintenance-token` |
 | `application_insights_name` | App Insights resource collecting Functions telemetry |
 | `application_insights_connection_string` | Connection string injected into managed Functions |
 | `log_analytics_workspace_id` | Workspace ID backing App Insights |
@@ -88,6 +88,7 @@ Workflow behavior:
 - PR preview, real-db E2E, and `main` deploy jobs refresh the `blog` submodule to the latest `main` revision before building and deploying.
 - `repository_dispatch` events of type `training-log-release` create/update a release PR and enable auto-merge.
 - Pushes to `main` run a multi-phase deploy sequence to avoid custom-domain race conditions.
+- A dedicated scheduled workflow calls the GDPR purge endpoint daily to hard-delete users whose deletion retention window has expired.
 
 Main deploy phases:
 
@@ -115,6 +116,14 @@ Database seeding behavior:
 2. Read `database-url` from Key Vault.
 3. Check `to_regclass('public.users')`.
 4. Run `blog/schema.sql` only when schema is missing.
+
+Scheduled purge behavior:
+
+1. GitHub Actions runs `.github/workflows/purge-deleted-users.yaml` on a daily cron and on manual dispatch.
+2. The workflow reads the deployed hostname from OpenTofu remote state.
+3. The workflow reads `gdpr-maintenance-token` from Key Vault.
+4. The workflow `POST`s to `/api/admin/purge-deleted-users` with the maintenance header expected by the Azure Function.
+5. The run summary records how many soft-deleted users were purged and the retention cutoff used for the run.
 
 ## Required GitHub secrets
 

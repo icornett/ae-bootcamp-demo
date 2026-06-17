@@ -9,6 +9,10 @@ on:
   repository_dispatch:
     types: [training-log-release]
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   release-pr:
     name: Create Release PR

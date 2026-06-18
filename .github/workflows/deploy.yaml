@@ -124,6 +124,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          NODE_ENV: production
 
       - name: Run web tests with coverage
         run: npm run test:web:ci
@@ -279,6 +281,8 @@ jobs:
         run: |
           npm ci
           npm run build
+        env:
+          NODE_ENV: production
 
       - name: Deploy to Staging Slot
         uses: Azure/static-web-apps-deploy@v1
@@ -366,15 +370,32 @@ jobs:
       - name: Install dependencies
         working-directory: blog
         run: npm ci
+        env:
+          NODE_ENV: production
 
       - name: Install Playwright browsers
         working-directory: blog
         run: npx playwright install --with-deps chromium webkit
 
-      - name: Validate staging URL for real-db tests
+      - name: Wait for staging deployment to be healthy
         run: |
-          test -n "$BASE_URL" || { echo "Error: staging URL is empty; cannot run real-db Playwright tests"; exit 1; }
-          echo "Running real-db tests against: $BASE_URL"
+          MAX_RETRIES=30
+          RETRY_DELAY=10
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Attempt $i/$MAX_RETRIES: Checking staging health at $BASE_URL..."
+            if curl -sf --connect-timeout 5 "$BASE_URL/login" > /dev/null 2>&1; then
+              echo "✓ Staging deployment is healthy and responsive"
+              exit 0
+            fi
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "  Not ready yet. Waiting ${RETRY_DELAY}s..."
+              sleep $RETRY_DELAY
+            fi
+          done
+
+          echo "✗ Staging deployment did not become healthy within $((MAX_RETRIES * RETRY_DELAY))s"
+          exit 1
 
       - name: Run real-db Playwright tests
         working-directory: blog
@@ -542,6 +563,8 @@ jobs:
         run: |
           npm ci
           npm run build
+        env:
+          NODE_ENV: production
 
       - name: Deploy to Static Web App
         uses: Azure/static-web-apps-deploy@v1

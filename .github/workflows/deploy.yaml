@@ -447,26 +447,33 @@ jobs:
             -var="enable_custom_domain=true" \
             -var="manage_blog_validation_record=false"
 
-      - name: Wait For DNS Propagation
+      - name: Wait For Public DNS Propagation
         run: |
           SWA_HOSTNAME="$(tofu output -raw swa_default_hostname)"
           DOMAIN_NAME="$(tofu output -raw cloudflare_record_hostname)"
 
-          echo "Waiting for DNS to point '$DOMAIN_NAME' at '$SWA_HOSTNAME'..."
+          echo "Waiting for public DNS for '$DOMAIN_NAME' to become available..."
 
           for i in {1..40}; do
-            RESOLVED="$(dig +short CNAME "$DOMAIN_NAME" | sed 's/\.$//')"
+            CNAME_TARGET="$(dig +short CNAME "$DOMAIN_NAME" | sed 's/\.$//' | head -n 1)"
+            A_RECORDS="$(dig +short A "$DOMAIN_NAME" | paste -sd ',' -)"
+            AAAA_RECORDS="$(dig +short AAAA "$DOMAIN_NAME" | paste -sd ',' -)"
 
-            if [ "$RESOLVED" = "$SWA_HOSTNAME" ]; then
-              echo "DNS is propagated."
+            if [ "$CNAME_TARGET" = "$SWA_HOSTNAME" ]; then
+              echo "DNS is propagated via CNAME."
               exit 0
             fi
 
-            echo "Attempt $i/40: cname='$RESOLVED' (waiting 15s)"
+            if [ -n "$A_RECORDS" ] || [ -n "$AAAA_RECORDS" ]; then
+              echo "DNS is propagated via address records (likely proxied by Cloudflare)."
+              exit 0
+            fi
+
+            echo "Attempt $i/40: cname='$CNAME_TARGET' a='$A_RECORDS' aaaa='$AAAA_RECORDS' (waiting 15s)"
             sleep 15
           done
 
-          echo "DNS propagation did not complete in time."
+          echo "Public DNS propagation did not complete in time."
           exit 1
 
       - name: Install PostgreSQL client

@@ -134,6 +134,35 @@ jobs:
       - name: Run mobile Playwright tests (iOS + Android)
         run: npm run test:e2e:mobile
 
+  require-pr-for-main:
+    name: Require PR For Main
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Fail direct pushes to main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          API_URL="https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls"
+          RESPONSE="$(curl -fsSL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$API_URL")"
+
+          PR_COUNT="$(printf '%s' "$RESPONSE" | jq 'length')"
+          PR_NUMBERS="$(printf '%s' "$RESPONSE" | jq -r 'map(.number | tostring) | join(", ")')"
+
+          if [ "$PR_COUNT" -gt 0 ]; then
+            echo "Commit $GITHUB_SHA is associated with PR(s): $PR_NUMBERS"
+            exit 0
+          fi
+
+          echo "Direct pushes to main are not allowed. Merge through a pull request instead."
+          exit 1
+
   tofu-plan:
     name: Tofu Plan (PR)
     runs-on: ubuntu-latest
@@ -400,7 +429,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    needs: [validate-specs, web-coverage]
+    needs: [validate-specs, web-coverage, require-pr-for-main]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       id-token: write

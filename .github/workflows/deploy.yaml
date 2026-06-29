@@ -7,7 +7,7 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review, closed]
   repository_dispatch:
-    types: [training-log-release]
+    types: [training-log-release, training-log-pr-staging]
 
 permissions:
   contents: write
@@ -111,11 +111,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update blog submodule to latest main
+      - name: Use blog submodule commit from PR
         run: |
           git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
-          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
+          echo "Using blog submodule revision from PR: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -181,11 +181,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update blog submodule to latest main
+      - name: Use blog submodule commit from PR
         run: |
           git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
-          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
+          echo "Using blog submodule revision from PR: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2
@@ -242,11 +242,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update blog submodule to latest main
+      - name: Use blog submodule commit from PR
         run: |
           git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
-          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
+          echo "Using blog submodule revision from PR: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2
@@ -306,6 +306,152 @@ jobs:
           echo "url=$STAGING_URL" >> "$GITHUB_OUTPUT"
           echo "Staging deployment URL: $STAGING_URL"
 
+      - name: Map staging domain in Cloudflare
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          STAGING_DOMAIN="gym-stg.digitaldelirium.tech"
+          STAGING_HOST="${{ steps.swa_info.outputs.name }}-staging.westus2.webstatic.azure.com"
+          RECORD_NAME="${STAGING_DOMAIN%%.digitaldelirium.tech}"
+
+          echo "Ensuring Cloudflare CNAME ${STAGING_DOMAIN} -> ${STAGING_HOST}"
+
+          EXISTING_RECORD_ID="$(curl -fsSL \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=CNAME&name=$STAGING_DOMAIN" | jq -r '.result[0].id // empty')"
+
+          if [ -n "$EXISTING_RECORD_ID" ]; then
+            curl -fsSL -X PUT \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$EXISTING_RECORD_ID" \
+              --data "{\"type\":\"CNAME\",\"name\":\"$RECORD_NAME\",\"content\":\"$STAGING_HOST\",\"ttl\":60,\"proxied\":false}" >/dev/null
+            echo "Updated existing Cloudflare staging CNAME"
+          else
+            curl -fsSL -X POST \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records" \
+              --data "{\"type\":\"CNAME\",\"name\":\"$RECORD_NAME\",\"content\":\"$STAGING_HOST\",\"ttl\":60,\"proxied\":false}" >/dev/null
+            echo "Created Cloudflare staging CNAME"
+          fi
+
+  staging-deploy-from-training-log-pr:
+    name: Staging Deploy (training-log PR)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'training-log-pr-staging'
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: infra/opentofu/azure
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Checkout requested training-log PR revision in blog submodule
+        env:
+          BLOG_SHA: ${{ github.event.client_payload.sha }}
+          BLOG_REF: ${{ github.event.client_payload.ref }}
+          BLOG_PR: ${{ github.event.client_payload.pr_number }}
+        run: |
+          git -C "$GITHUB_WORKSPACE" submodule sync --recursive
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
+
+          test -n "$BLOG_SHA" || { echo "Missing client_payload.sha"; exit 1; }
+
+          git -C "$GITHUB_WORKSPACE/blog" fetch --force origin "$BLOG_REF" || true
+          git -C "$GITHUB_WORKSPACE/blog" fetch --force origin "$BLOG_SHA" || true
+          git -C "$GITHUB_WORKSPACE/blog" checkout --force "$BLOG_SHA"
+
+          echo "Using training-log PR #${BLOG_PR} revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+
+      - name: Tofu Init
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: tofu init
+
+      - name: Get SWA deployment token
+        id: swa_token
+        run: echo "token=$(tofu output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
+
+      - name: Get SWA name for URL construction
+        id: swa_info
+        run: echo "name=$(tofu output -raw swa_name)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build web app
+        working-directory: blog
+        run: |
+          npm ci
+          npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Deploy to Staging Slot
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: blog/dist
+          api_location: blog/api
+          api_build_command: npm run build
+          skip_app_build: true
+          deployment_environment: staging
+        env:
+          NODE_VERSION: 22
+
+      - name: Map staging domain in Cloudflare
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          STAGING_DOMAIN="gym-stg.digitaldelirium.tech"
+          STAGING_HOST="${{ steps.swa_info.outputs.name }}-staging.westus2.webstatic.azure.com"
+          RECORD_NAME="${STAGING_DOMAIN%%.digitaldelirium.tech}"
+
+          echo "Ensuring Cloudflare CNAME ${STAGING_DOMAIN} -> ${STAGING_HOST}"
+
+          EXISTING_RECORD_ID="$(curl -fsSL \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=CNAME&name=$STAGING_DOMAIN" | jq -r '.result[0].id // empty')"
+
+          if [ -n "$EXISTING_RECORD_ID" ]; then
+            curl -fsSL -X PUT \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$EXISTING_RECORD_ID" \
+              --data "{\"type\":\"CNAME\",\"name\":\"$RECORD_NAME\",\"content\":\"$STAGING_HOST\",\"ttl\":60,\"proxied\":false}" >/dev/null
+            echo "Updated existing Cloudflare staging CNAME"
+          else
+            curl -fsSL -X POST \
+              -H "Authorization: Bearer $CF_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records" \
+              --data "{\"type\":\"CNAME\",\"name\":\"$RECORD_NAME\",\"content\":\"$STAGING_HOST\",\"ttl\":60,\"proxied\":false}" >/dev/null
+            echo "Created Cloudflare staging CNAME"
+          fi
+
   real-db-e2e:
     name: Real DB E2E (Staging)
     runs-on: ubuntu-latest
@@ -324,11 +470,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update blog submodule to latest main
+      - name: Use blog submodule commit from PR
         run: |
           git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
-          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
+          echo "Using blog submodule revision from PR: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2
@@ -426,11 +572,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update blog submodule to latest main
+      - name: Use blog submodule commit from PR
         run: |
           git -C "$GITHUB_WORKSPACE" submodule sync --recursive
-          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive --remote blog
-          echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
+          echo "Using blog submodule revision from PR: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
         uses: azure/login@v2

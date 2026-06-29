@@ -123,7 +123,9 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci --ignore-scripts
+          npm --prefix api ci
 
       - name: Run web tests with coverage
         run: npm run test:web:ci
@@ -279,7 +281,8 @@ jobs:
       - name: Build web app
         working-directory: blog
         run: |
-          npm ci
+          npm ci --ignore-scripts
+          npm --prefix api ci
           NODE_ENV=production npm run build
 
       - name: Deploy to Staging Slot
@@ -440,7 +443,8 @@ jobs:
       - name: Build web app
         working-directory: blog
         run: |
-          npm ci
+          npm ci --ignore-scripts
+          npm --prefix api ci
           NODE_ENV=production npm run build
 
       - name: Deploy to Staging Slot
@@ -592,7 +596,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: blog
-        run: npm ci
+        run: |
+          npm ci --ignore-scripts
+          npm --prefix api ci
 
       - name: Install Playwright browsers
         working-directory: blog
@@ -782,7 +788,8 @@ jobs:
       - name: Build web app
         working-directory: blog
         run: |
-          npm ci
+          npm ci --ignore-scripts
+          npm --prefix api ci
           NODE_ENV=production npm run build
 
       - name: Deploy to Static Web App

@@ -124,8 +124,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-        env:
-          NODE_ENV: production
 
       - name: Run web tests with coverage
         run: npm run test:web:ci
@@ -280,9 +278,7 @@ jobs:
         working-directory: blog
         run: |
           npm ci
-          npm run build
-        env:
-          NODE_ENV: production
+          NODE_ENV=production npm run build
 
       - name: Deploy to Staging Slot
         uses: Azure/static-web-apps-deploy@v1
@@ -402,9 +398,7 @@ jobs:
         working-directory: blog
         run: |
           npm ci
-          npm run build
-        env:
-          NODE_ENV: production
+          NODE_ENV=production npm run build
 
       - name: Deploy to Staging Slot
         uses: Azure/static-web-apps-deploy@v1
@@ -516,8 +510,6 @@ jobs:
       - name: Install dependencies
         working-directory: blog
         run: npm ci
-        env:
-          NODE_ENV: production
 
       - name: Install Playwright browsers
         working-directory: blog
@@ -708,9 +700,7 @@ jobs:
         working-directory: blog
         run: |
           npm ci
-          npm run build
-        env:
-          NODE_ENV: production
+          NODE_ENV=production npm run build
 
       - name: Deploy to Static Web App
         uses: Azure/static-web-apps-deploy@v1

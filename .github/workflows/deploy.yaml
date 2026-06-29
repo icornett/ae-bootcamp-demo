@@ -265,9 +265,11 @@ jobs:
         id: swa_token
         run: echo "token=$(tofu output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
 
-      - name: Get SWA name for URL construction
+      - name: Get SWA identity
         id: swa_info
-        run: echo "name=$(tofu output -raw swa_name)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "name=$(tofu output -raw swa_name)" >> "$GITHUB_OUTPUT"
+          echo "resource_group=$(tofu output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -294,11 +296,26 @@ jobs:
         env:
           NODE_VERSION: 22
 
+      - name: Resolve staging environment hostname
+        id: staging_env
+        run: |
+          SWA_NAME="${{ steps.swa_info.outputs.name }}"
+          RG_NAME="${{ steps.swa_info.outputs.resource_group }}"
+
+          STAGING_HOST="$(az staticwebapp environment list \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "[?name=='staging'].hostname | [0]" \
+            -o tsv)"
+
+          test -n "$STAGING_HOST" || { echo "Failed to resolve staging hostname from Azure"; exit 1; }
+          echo "host=$STAGING_HOST" >> "$GITHUB_OUTPUT"
+          echo "Resolved staging host: $STAGING_HOST"
+
       - name: Construct staging URL
         id: staging_url
         run: |
-          SWA_NAME="${{ steps.swa_info.outputs.name }}"
-          STAGING_URL="https://${SWA_NAME}-staging.westus2.webstatic.azure.com"
+          STAGING_URL="https://${{ steps.staging_env.outputs.host }}"
           echo "url=$STAGING_URL" >> "$GITHUB_OUTPUT"
           echo "Staging deployment URL: $STAGING_URL"
 
@@ -308,7 +325,7 @@ jobs:
           CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
         run: |
           STAGING_DOMAIN="gym-stg.digitaldelirium.tech"
-          STAGING_HOST="${{ steps.swa_info.outputs.name }}-staging.westus2.webstatic.azure.com"
+          STAGING_HOST="${{ steps.staging_env.outputs.host }}"
           RECORD_NAME="${STAGING_DOMAIN%%.digitaldelirium.tech}"
 
           echo "Ensuring Cloudflare CNAME ${STAGING_DOMAIN} -> ${STAGING_HOST}"
@@ -333,6 +350,30 @@ jobs:
               --data "{\"type\":\"CNAME\",\"name\":\"$RECORD_NAME\",\"content\":\"$STAGING_HOST\",\"ttl\":60,\"proxied\":false}" >/dev/null
             echo "Created Cloudflare staging CNAME"
           fi
+
+      - name: Verify staging DNS mapping
+        run: |
+          STAGING_DOMAIN="gym-stg.digitaldelirium.tech"
+          EXPECTED_HOST="${{ steps.staging_env.outputs.host }}"
+
+          echo "Waiting for ${STAGING_DOMAIN} to resolve to ${EXPECTED_HOST}"
+
+          for i in {1..20}; do
+            CNAME_TARGET="$(dig +short CNAME "$STAGING_DOMAIN" | sed 's/\.$//' | head -n 1)"
+            if [ "$CNAME_TARGET" = "$EXPECTED_HOST" ]; then
+              echo "Staging DNS is correctly mapped."
+              exit 0
+            fi
+
+            echo "Attempt $i/20: cname='${CNAME_TARGET}' expected='${EXPECTED_HOST}' (waiting 10s)"
+            sleep 10
+          done
+
+          echo "Staging DNS mapping check failed."
+          dig +short CNAME "$STAGING_DOMAIN" || true
+          dig +short A "$STAGING_DOMAIN" || true
+          dig +short AAAA "$STAGING_DOMAIN" || true
+          exit 1
 
   staging-deploy-from-training-log-pr:
     name: Staging Deploy (training-log PR)
@@ -385,9 +426,11 @@ jobs:
         id: swa_token
         run: echo "token=$(tofu output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
 
-      - name: Get SWA name for URL construction
+      - name: Get SWA identity
         id: swa_info
-        run: echo "name=$(tofu output -raw swa_name)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "name=$(tofu output -raw swa_name)" >> "$GITHUB_OUTPUT"
+          echo "resource_group=$(tofu output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -414,13 +457,29 @@ jobs:
         env:
           NODE_VERSION: 22
 
+      - name: Resolve staging environment hostname
+        id: staging_env
+        run: |
+          SWA_NAME="${{ steps.swa_info.outputs.name }}"
+          RG_NAME="${{ steps.swa_info.outputs.resource_group }}"
+
+          STAGING_HOST="$(az staticwebapp environment list \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "[?name=='staging'].hostname | [0]" \
+            -o tsv)"
+
+          test -n "$STAGING_HOST" || { echo "Failed to resolve staging hostname from Azure"; exit 1; }
+          echo "host=$STAGING_HOST" >> "$GITHUB_OUTPUT"
+          echo "Resolved staging host: $STAGING_HOST"
+
       - name: Map staging domain in Cloudflare
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
         run: |
           STAGING_DOMAIN="gym-stg.digitaldelirium.tech"
-          STAGING_HOST="${{ steps.swa_info.outputs.name }}-staging.westus2.webstatic.azure.com"
+          STAGING_HOST="${{ steps.staging_env.outputs.host }}"
           RECORD_NAME="${STAGING_DOMAIN%%.digitaldelirium.tech}"
 
           echo "Ensuring Cloudflare CNAME ${STAGING_DOMAIN} -> ${STAGING_HOST}"
@@ -445,6 +504,30 @@ jobs:
               --data "{\"type\":\"CNAME\",\"name\":\"$RECORD_NAME\",\"content\":\"$STAGING_HOST\",\"ttl\":60,\"proxied\":false}" >/dev/null
             echo "Created Cloudflare staging CNAME"
           fi
+
+      - name: Verify staging DNS mapping
+        run: |
+          STAGING_DOMAIN="gym-stg.digitaldelirium.tech"
+          EXPECTED_HOST="${{ steps.staging_env.outputs.host }}"
+
+          echo "Waiting for ${STAGING_DOMAIN} to resolve to ${EXPECTED_HOST}"
+
+          for i in {1..20}; do
+            CNAME_TARGET="$(dig +short CNAME "$STAGING_DOMAIN" | sed 's/\.$//' | head -n 1)"
+            if [ "$CNAME_TARGET" = "$EXPECTED_HOST" ]; then
+              echo "Staging DNS is correctly mapped."
+              exit 0
+            fi
+
+            echo "Attempt $i/20: cname='${CNAME_TARGET}' expected='${EXPECTED_HOST}' (waiting 10s)"
+            sleep 10
+          done
+
+          echo "Staging DNS mapping check failed."
+          dig +short CNAME "$STAGING_DOMAIN" || true
+          dig +short A "$STAGING_DOMAIN" || true
+          dig +short AAAA "$STAGING_DOMAIN" || true
+          exit 1
 
   real-db-e2e:
     name: Real DB E2E (Staging)

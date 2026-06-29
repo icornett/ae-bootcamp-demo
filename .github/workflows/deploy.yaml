@@ -234,6 +234,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      pull-requests: write
     defaults:
       run:
         working-directory: infra/opentofu/azure
@@ -286,6 +287,7 @@ jobs:
           NODE_ENV=production npm run build
 
       - name: Deploy to Staging Slot
+        id: deploy_staging
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
@@ -299,26 +301,22 @@ jobs:
         env:
           NODE_VERSION: 22
 
-      - name: Resolve staging environment hostname
+      - name: Resolve staging URL and hostname
         id: staging_env
         run: |
-          SWA_NAME="${{ steps.swa_info.outputs.name }}"
-          RG_NAME="${{ steps.swa_info.outputs.resource_group }}"
-
-          STAGING_HOST="$(az staticwebapp environment list \
-            --name "$SWA_NAME" \
-            --resource-group "$RG_NAME" \
-            --query "[?name=='staging'].hostname | [0]" \
-            -o tsv)"
-
+          STAGING_URL="${{ steps.deploy_staging.outputs.static_web_app_url }}"
+          test -n "$STAGING_URL" || { echo "Failed to resolve staging URL from deploy action"; exit 1; }
+          STAGING_HOST="$(printf '%s' "$STAGING_URL" | sed -E 's#^https?://([^/]+)/?.*$#\1#')"
           test -n "$STAGING_HOST" || { echo "Failed to resolve staging hostname from Azure"; exit 1; }
+          echo "url=$STAGING_URL" >> "$GITHUB_OUTPUT"
           echo "host=$STAGING_HOST" >> "$GITHUB_OUTPUT"
+          echo "Resolved staging URL: $STAGING_URL"
           echo "Resolved staging host: $STAGING_HOST"
 
       - name: Construct staging URL
         id: staging_url
         run: |
-          STAGING_URL="https://${{ steps.staging_env.outputs.host }}"
+          STAGING_URL="${{ steps.staging_env.outputs.url }}"
           echo "url=$STAGING_URL" >> "$GITHUB_OUTPUT"
           echo "Staging deployment URL: $STAGING_URL"
 
@@ -361,15 +359,15 @@ jobs:
 
           echo "Waiting for ${STAGING_DOMAIN} to resolve to ${EXPECTED_HOST}"
 
-          for i in {1..20}; do
+          for i in {1..40}; do
             CNAME_TARGET="$(dig +short CNAME "$STAGING_DOMAIN" | sed 's/\.$//' | head -n 1)"
             if [ "$CNAME_TARGET" = "$EXPECTED_HOST" ]; then
               echo "Staging DNS is correctly mapped."
               exit 0
             fi
 
-            echo "Attempt $i/20: cname='${CNAME_TARGET}' expected='${EXPECTED_HOST}' (waiting 10s)"
-            sleep 10
+            echo "Attempt $i/40: cname='${CNAME_TARGET}' expected='${EXPECTED_HOST}' (waiting 15s)"
+            sleep 15
           done
 
           echo "Staging DNS mapping check failed."
@@ -377,6 +375,46 @@ jobs:
           dig +short A "$STAGING_DOMAIN" || true
           dig +short AAAA "$STAGING_DOMAIN" || true
           exit 1
+
+      - name: Comment staging URL on PR
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const body = [
+              '### Staging Deployment Ready',
+              `- URL: ${{ steps.staging_url.outputs.url }}`,
+              `- DNS: gym-stg.digitaldelirium.tech -> ${{ steps.staging_env.outputs.host }}`
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body,
+            });
+
+      - name: Comment staging deploy failure on PR
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const body = [
+              '### Staging Deployment Failed',
+              `- Run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '- Check the `Staging Deploy` job logs for details.'
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body,
+            });
 
   staging-deploy-from-training-log-pr:
     name: Staging Deploy (training-log PR)
@@ -448,6 +486,7 @@ jobs:
           NODE_ENV=production npm run build
 
       - name: Deploy to Staging Slot
+        id: deploy_staging
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
@@ -461,20 +500,16 @@ jobs:
         env:
           NODE_VERSION: 22
 
-      - name: Resolve staging environment hostname
+      - name: Resolve staging URL and hostname
         id: staging_env
         run: |
-          SWA_NAME="${{ steps.swa_info.outputs.name }}"
-          RG_NAME="${{ steps.swa_info.outputs.resource_group }}"
-
-          STAGING_HOST="$(az staticwebapp environment list \
-            --name "$SWA_NAME" \
-            --resource-group "$RG_NAME" \
-            --query "[?name=='staging'].hostname | [0]" \
-            -o tsv)"
-
+          STAGING_URL="${{ steps.deploy_staging.outputs.static_web_app_url }}"
+          test -n "$STAGING_URL" || { echo "Failed to resolve staging URL from deploy action"; exit 1; }
+          STAGING_HOST="$(printf '%s' "$STAGING_URL" | sed -E 's#^https?://([^/]+)/?.*$#\1#')"
           test -n "$STAGING_HOST" || { echo "Failed to resolve staging hostname from Azure"; exit 1; }
+          echo "url=$STAGING_URL" >> "$GITHUB_OUTPUT"
           echo "host=$STAGING_HOST" >> "$GITHUB_OUTPUT"
+          echo "Resolved staging URL: $STAGING_URL"
           echo "Resolved staging host: $STAGING_HOST"
 
       - name: Map staging domain in Cloudflare
@@ -516,15 +551,15 @@ jobs:
 
           echo "Waiting for ${STAGING_DOMAIN} to resolve to ${EXPECTED_HOST}"
 
-          for i in {1..20}; do
+          for i in {1..40}; do
             CNAME_TARGET="$(dig +short CNAME "$STAGING_DOMAIN" | sed 's/\.$//' | head -n 1)"
             if [ "$CNAME_TARGET" = "$EXPECTED_HOST" ]; then
               echo "Staging DNS is correctly mapped."
               exit 0
             fi
 
-            echo "Attempt $i/20: cname='${CNAME_TARGET}' expected='${EXPECTED_HOST}' (waiting 10s)"
-            sleep 10
+            echo "Attempt $i/40: cname='${CNAME_TARGET}' expected='${EXPECTED_HOST}' (waiting 15s)"
+            sleep 15
           done
 
           echo "Staging DNS mapping check failed."

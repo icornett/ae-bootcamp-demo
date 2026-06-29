@@ -24,7 +24,7 @@ jobs:
     outputs:
       pull_request_number: ${{ steps.cpr.outputs.pull-request-number }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
           fetch-depth: 0
@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'repository_dispatch' && (github.event_name != 'pull_request' || github.event.action != 'closed')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Spectral (OpenAPI linter)
         run: |
@@ -107,7 +107,7 @@ jobs:
       run:
         working-directory: blog
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -118,7 +118,7 @@ jobs:
           echo "Using blog submodule revision from PR: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
 
@@ -177,7 +177,7 @@ jobs:
       run:
         working-directory: infra/opentofu/azure
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -188,12 +188,12 @@ jobs:
           echo "Using blog submodule revision from PR: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@v2
 
       - name: Tofu Init
         env:
@@ -239,7 +239,7 @@ jobs:
       run:
         working-directory: infra/opentofu/azure
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -250,12 +250,12 @@ jobs:
           echo "Using blog submodule revision from PR: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@v2
 
       - name: Tofu Init
         env:
@@ -275,7 +275,7 @@ jobs:
           echo "resource_group=$(tofu output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
 
@@ -378,7 +378,7 @@ jobs:
 
       - name: Comment staging URL on PR
         if: success()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -398,7 +398,7 @@ jobs:
 
       - name: Comment staging deploy failure on PR
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -427,7 +427,7 @@ jobs:
       run:
         working-directory: infra/opentofu/azure
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -449,12 +449,12 @@ jobs:
           echo "Using training-log PR #${BLOG_PR} revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@v2
 
       - name: Tofu Init
         env:
@@ -474,7 +474,7 @@ jobs:
           echo "resource_group=$(tofu output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
 
@@ -582,7 +582,7 @@ jobs:
     env:
       BASE_URL: ${{ needs.staging-deploy.outputs.staging_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -593,12 +593,12 @@ jobs:
           echo "Using blog submodule revision from PR: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@v2
 
       - name: Tofu Init
         env:
@@ -625,7 +625,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$GITHUB_WORKSPACE/blog/tests/e2e/seed/real-db-seed.sql"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
 
@@ -684,7 +684,7 @@ jobs:
       run:
         working-directory: infra/opentofu/azure
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -695,12 +695,12 @@ jobs:
           echo "Using blog submodule revision from PR: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@v2
 
       - name: Tofu Init
         env:
@@ -733,7 +733,7 @@ jobs:
       run:
         working-directory: infra/opentofu/azure
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -744,12 +744,12 @@ jobs:
           echo "Using latest blog submodule revision: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Azure Login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@v2
 
       - name: Tofu Init
         env:
@@ -816,9 +816,9 @@ jobs:
         run: echo "token=$(tofu output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 25
+          node-version: 24
 
       - name: Build web app
         working-directory: blog

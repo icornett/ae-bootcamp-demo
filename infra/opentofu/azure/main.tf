@@ -113,6 +113,24 @@ resource "azurerm_subnet" "sql_runner" {
   }
 }
 
+resource "azurerm_network_security_group" "private_subnets" {
+  name                = "workout-private-subnets-nsg-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+
+  tags = local.common_tags
+}
+
+resource "azurerm_subnet_network_security_group_association" "private_endpoints" {
+  subnet_id                 = azurerm_subnet.private_endpoints.id
+  network_security_group_id = azurerm_network_security_group.private_subnets.id
+}
+
+resource "azurerm_subnet_network_security_group_association" "sql_runner" {
+  subnet_id                 = azurerm_subnet.sql_runner.id
+  network_security_group_id = azurerm_network_security_group.private_subnets.id
+}
+
 resource "azurerm_private_dns_zone" "key_vault" {
   name                = "privatelink.vaultcore.azure.net"
   resource_group_name = azurerm_resource_group.main.name
@@ -221,6 +239,7 @@ resource "azurerm_private_endpoint" "postgresql" {
 }
 
 resource "azurerm_postgresql_flexible_server_firewall_rule" "azure_services" {
+  #checkov:skip=CKV2_AZURE_26: This rule is disabled by default and only exists as explicit break-glass access; private endpoint connectivity is the secure default.
   count            = var.allow_azure_services_postgres ? 1 : 0
   name             = "allow-azure-services"
   server_id        = azurerm_postgresql_flexible_server.main.id

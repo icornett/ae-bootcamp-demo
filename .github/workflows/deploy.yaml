@@ -91,7 +91,9 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Validate OpenAPI spec
-        run: npx --yes @stoplight/spectral-cli lint specs/openapi/blog-api.yaml
+        run: |
+          npm install --no-save @stoplight/spectral-cli @stoplight/spectral-rulesets
+          npx spectral lint specs/openapi/blog-api.yaml
 
   web-coverage:
     name: Web Quality Gates
@@ -823,7 +825,7 @@ jobs:
 
           RUN_STATE=""
           for i in $(seq 1 60); do
-            RUN_STATE="$(az container show --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" --query 'instanceView.currentState.state' -o tsv 2>/dev/null || true)"
+            RUN_STATE="$(az container show --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" --query 'containers[0].instanceView.currentState.state' -o tsv 2>/dev/null || true)"
             EXIT_CODE="$(az container show --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" --query 'containers[0].instanceView.currentState.exitCode' -o tsv 2>/dev/null || true)"
 
             if [ "$RUN_STATE" = "Terminated" ]; then
@@ -1071,7 +1073,7 @@ jobs:
 
           RUN_STATE=""
           for i in $(seq 1 60); do
-            RUN_STATE="$(az container show --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" --query 'instanceView.currentState.state' -o tsv 2>/dev/null || true)"
+            RUN_STATE="$(az container show --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" --query 'containers[0].instanceView.currentState.state' -o tsv 2>/dev/null || true)"
             EXIT_CODE="$(az container show --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" --query 'containers[0].instanceView.currentState.exitCode' -o tsv 2>/dev/null || true)"
 
             if [ "$RUN_STATE" = "Terminated" ]; then

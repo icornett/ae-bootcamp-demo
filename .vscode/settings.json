@@ -21,6 +21,9 @@
         "editor.defaultFormatter": "gamunu.opentofu"
     },
     "opentofu.languageServer.enable": true,
+    // Infracost extension currently exposes a single diagnostics toggle for
+    // FinOps + tag policy diagnostics (no tag-only filter).
+    "infracost.enableDiagnostics": false,
     "chat.mcp.serverSampling": {
         "workout-blog/.vscode/mcp.json: @azure/mcp": {
             "allowedDuringChat": true

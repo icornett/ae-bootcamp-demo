@@ -49,3 +49,27 @@ variable "manage_blog_validation_record" {
   type        = bool
   default     = true
 }
+
+variable "key_vault_ci_object_id" {
+  description = "Optional object ID for the CI/CD principal that needs Key Vault secret read permissions (for workflows such as purge token retrieval)."
+  type        = string
+  default     = null
+}
+
+variable "enable_user_assigned_identity" {
+  description = "Create an optional user-assigned managed identity and grant Key Vault secret read access."
+  type        = bool
+  default     = false
+}
+
+variable "allow_azure_services_postgres" {
+  description = "Whether to keep PostgreSQL firewall rule 0.0.0.0/0.0.0.0 (Allow Azure services). Disable only after all consumers use private networking paths."
+  type        = bool
+  default     = false
+}
+
+variable "key_vault_rbac_wait_duration" {
+  description = "Delay after Key Vault role assignments to allow RBAC propagation before secret reads/writes."
+  type        = string
+  default     = "30s"
+}

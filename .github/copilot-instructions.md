@@ -87,10 +87,13 @@ Use this memory system as follows:
 The currently deployed stack is defined by `infra/opentofu/azure/main.tf`.
 
 - IaC: OpenTofu >= 1.6
-- Providers: `hashicorp/azurerm ~> 3.90`, `hashicorp/random ~> 3.6`, `cloudflare/cloudflare ~> 5.0`
+- Providers: `hashicorp/azurerm ~> 3.90`, `hashicorp/random ~> 3.6`, `hashicorp/time ~> 0.11`, `cloudflare/cloudflare ~> 5.0`
 - Frontend/API hosting: Azure Static Web App (Standard tier) with managed Azure Functions
 - Database: Azure PostgreSQL Flexible Server 16
 - Secrets: Azure Key Vault
+- Private networking: Azure Private Endpoints + Private DNS zones for Key Vault and PostgreSQL
+- Workflow-managed ephemeral Azure Container Instance SQL runner (Azure CLI) for one-off schema/init tasks
+- Key Vault auth model: Azure RBAC with purge protection enabled
 - Observability: Azure Application Insights backed by Azure Log Analytics Workspace
 - DNS: Cloudflare CNAME record for the app domain
 
@@ -100,16 +103,15 @@ Do not rely on older assumptions about ACI, Caddy, GHCR image polling, or image 
 The current deployment flow is:
 
 1. Validate the OpenAPI spec.
-2. Log in to Azure.
-3. Run `tofu init` in `infra/opentofu/azure/`.
-4. Apply infrastructure and DNS with custom-domain creation disabled.
-5. Wait for DNS propagation.
-6. Apply custom-domain binding.
-7. Wait for Azure custom-domain status to become `Ready`.
-8. Apply again with Cloudflare proxy enabled.
-9. Seed `blog/schema.sql` only when the PostgreSQL schema does not yet exist.
-10. Deploy `blog/` and `blog/api/` with `Azure/static-web-apps-deploy@v1`.
-11. Let the scheduled GDPR purge workflow call `/api/admin/purge-deleted-users` with the Key Vault-backed maintenance token.
+2. Run Checkov (`checkov-scan`) against `infra/opentofu/azure/` and publish SARIF.
+3. Log in to Azure.
+4. Run `tofu init` in `infra/opentofu/azure/`.
+5. Apply infrastructure with custom domain enabled and `allow_azure_services_postgres=false`.
+6. Wait for DNS propagation.
+7. Seed schema (and PR test seed data) through a private Azure Container Instance SQL runner.
+8. Deploy `blog/` and `blog/api/` with `Azure/static-web-apps-deploy@v1`.
+9. Wait for Azure custom-domain status to become `Ready`.
+10. Let the scheduled GDPR purge workflow call `/api/admin/purge-deleted-users` with the Key Vault-backed maintenance token.
 
 Important current behavior:
 
@@ -117,6 +119,11 @@ Important current behavior:
 - Custom domain binding is explicitly staged to avoid DNS propagation races.
 - SWA deploy token is sourced from OpenTofu output `swa_api_key`.
 - The GDPR purge cron reads `gdpr-maintenance-token` from Key Vault and calls the managed API endpoint directly.
+- Checkov scan output is uploaded as SARIF for code scanning and as a build artifact.
+- Some Checkov controls are intentionally skipped in Terraform with inline rationale for current CI/runtime constraints.
+- PostgreSQL Azure-services firewall rule remains configurable (`allow_azure_services_postgres`) but should stay disabled for private-only connectivity.
+- The SQL runner is created and destroyed from GitHub Actions with Azure CLI for schema and seed operations, so it does not need Terraform state entries.
+- SQL runner executions use a digest-pinned image (`postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416`) for immutable behavior.
 
 ## Working Conventions
 
@@ -125,6 +132,7 @@ Important current behavior:
 - Make infrastructure edits in `infra/opentofu/azure/`.
 - Keep changes minimal and aligned with current provider versions.
 - Run `tofu validate` after editing the module.
+- Run `checkov --framework terraform --directory infra/opentofu/azure --compact` before pushing infra changes.
 - Use `tofu plan` for inspection when needed.
 - Do not introduce Azure resources that contradict the current architecture without updating `README.md` and this file.
 
@@ -132,7 +140,7 @@ Important current behavior:
 
 - Keep `.github/workflows/deploy.yaml` aligned with actual OpenTofu variables.
 - When adding or removing required variables or secrets, update both `README.md` and this file.
-- Prefer staged applies over single-pass apply for custom-domain flows.
+- Keep the deploy flow aligned with the current single-pass apply plus post-apply health/validation gates.
 - Keep `.github/workflows/purge-deleted-users.yaml` aligned with the Key Vault secret names and the managed API route.
 
 ### For application changes under `blog/`

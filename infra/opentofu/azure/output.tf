@@ -55,3 +55,18 @@ output "log_analytics_workspace_id" {
   value       = azurerm_log_analytics_workspace.main.workspace_id
   description = "Workspace ID backing Application Insights for log queries"
 }
+
+output "swa_principal_id" {
+  value       = azurerm_static_web_app.main.identity[0].principal_id
+  description = "System-assigned managed identity principal ID for Static Web App"
+}
+
+output "runtime_user_assigned_identity_id" {
+  value       = var.enable_user_assigned_identity ? azurerm_user_assigned_identity.runtime[0].id : null
+  description = "Optional user-assigned managed identity resource ID"
+}
+
+output "runtime_user_assigned_identity_principal_id" {
+  value       = var.enable_user_assigned_identity ? azurerm_user_assigned_identity.runtime[0].principal_id : null
+  description = "Optional user-assigned managed identity principal ID"
+}

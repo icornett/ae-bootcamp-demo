@@ -890,7 +890,7 @@ jobs:
 
       - name: Run real-db Playwright tests
         working-directory: blog
-        run: npm run test:e2e:real-db
+        run: npm run test:e2e:real-db -- --workers=1
 
       - name: Upload Playwright test results
         if: always()

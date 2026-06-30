@@ -362,8 +362,8 @@ resource "azurerm_static_web_app" "main" {
   name                = "workout-swa-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
   resource_group_name = azurerm_resource_group.main.name
   location            = "centralus"
-  sku_tier            = "Free"
-  sku_size            = "Free"
+  sku_tier            = "Standard"
+  sku_size            = "Standard"
 
   identity {
     type = "SystemAssigned"

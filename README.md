@@ -16,7 +16,7 @@ The OpenTofu module provisions:
 - Azure PostgreSQL Flexible Server (plus DB and optional Azure-services firewall rule)
 - Azure Log Analytics Workspace
 - Azure Application Insights (workspace-based)
-- Azure Static Web App (Free tier) hosting the SPA and managed Functions
+- Azure Static Web App (Standard tier) hosting the SPA and managed Functions
 - Cloudflare CNAME record for the public hostname
 - Optional SWA custom-domain binding (controlled by variable)
 

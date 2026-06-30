@@ -90,13 +90,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install Spectral (OpenAPI linter)
-        run: |
-          npm install -g @stoplight/spectral-cli
-          npm install @stoplight/spectral-rulesets
-
       - name: Validate OpenAPI spec
-        run: spectral lint specs/openapi/blog-api.yaml
+        run: npx --yes @stoplight/spectral-cli lint specs/openapi/blog-api.yaml
 
   web-coverage:
     name: Web Quality Gates
@@ -123,6 +118,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            blog/package-lock.json
+            blog/api/package-lock.json
 
       - name: Install dependencies
         run: |
@@ -197,8 +196,7 @@ jobs:
 
       - name: Apply database schema
         run: |
-          npm install -g wait-port
-          wait-port 127.0.0.1:5432 --timeout 30000
+          npx --yes wait-port 127.0.0.1:5432 --timeout 30000
           PGPASSWORD=traininglog psql -h 127.0.0.1 -U traininglog -d training_log -f schema.sql
 
       - name: Build API and Frontend
@@ -443,6 +441,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            blog/package-lock.json
+            blog/api/package-lock.json
 
       - name: Build web app
         working-directory: blog
@@ -642,6 +644,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            blog/package-lock.json
+            blog/api/package-lock.json
 
       - name: Build web app
         working-directory: blog
@@ -845,6 +851,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            blog/package-lock.json
+            blog/api/package-lock.json
 
       - name: Install dependencies
         working-directory: blog
@@ -1093,6 +1103,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            blog/package-lock.json
+            blog/api/package-lock.json
 
       - name: Build web app
         working-directory: blog

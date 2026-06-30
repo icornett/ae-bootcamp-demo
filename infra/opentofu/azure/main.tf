@@ -382,6 +382,7 @@ resource "azurerm_static_web_app" "main" {
 }
 
 resource "azurerm_role_assignment" "key_vault_swa" {
+  count                = azurerm_static_web_app.main.identity[0].principal_id != null ? 1 : 0
   scope                = azurerm_key_vault.main.id
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azurerm_static_web_app.main.identity[0].principal_id

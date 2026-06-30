@@ -802,6 +802,7 @@ jobs:
             --resource-group "$RESOURCE_GROUP_NAME" \
             --name "$SQL_RUNNER_NAME" \
             --image "postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416" \
+            --os-type Linux \
             --cpu 0.5 \
             --memory 1 \
             --ip-address Private \
@@ -1046,6 +1047,7 @@ jobs:
             --resource-group "$RESOURCE_GROUP_NAME" \
             --name "$SQL_RUNNER_NAME" \
             --image "postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416" \
+            --os-type Linux \
             --cpu 0.5 \
             --memory 1 \
             --ip-address Private \

@@ -57,7 +57,7 @@ output "log_analytics_workspace_id" {
 }
 
 output "swa_principal_id" {
-  value       = azurerm_static_web_app.main.identity[0].principal_id
+  value       = try(azurerm_static_web_app.main.identity[0].principal_id, null)
   description = "System-assigned managed identity principal ID for Static Web App"
 }
 

@@ -103,6 +103,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'repository_dispatch' && (github.event_name != 'pull_request' || github.event.action != 'closed')
     needs: validate-specs
+    env:
+      POSTGRES_IMAGE: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
     defaults:
       run:
         working-directory: blog
@@ -133,8 +135,122 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium webkit
 
+      - name: Compute Postgres image manifest fingerprint
+        id: docker-manifest-hash-mobile
+        run: |
+          set -eu
+          postgres_hash="$(docker manifest inspect "${POSTGRES_IMAGE}" | sha256sum | awk '{print $1}')"
+          echo "postgres_hash=${postgres_hash}" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore cached Postgres image
+        id: docker-cache-postgres-mobile
+        uses: actions/cache@v6
+        with:
+          path: /tmp/.docker-cache/postgres
+          key: docker-${{ runner.os }}-postgres-16-alpine-${{ steps.docker-manifest-hash-mobile.outputs.postgres_hash }}
+
+      - name: Load or pull Postgres image
+        run: |
+          mkdir -p /tmp/.docker-cache/postgres
+          if [ -f /tmp/.docker-cache/postgres/postgres-16-alpine.tar ]; then
+            docker load -i /tmp/.docker-cache/postgres/postgres-16-alpine.tar
+          else
+            docker pull "${POSTGRES_IMAGE}"
+          fi
+
+      - name: Save Postgres image to cache
+        if: steps.docker-cache-postgres-mobile.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /tmp/.docker-cache/postgres
+          docker save "${POSTGRES_IMAGE}" -o /tmp/.docker-cache/postgres/postgres-16-alpine.tar
+
+      - name: Start Postgres container
+        run: |
+          docker run -d --rm \
+            --name training-log-mobile-postgres \
+            -e POSTGRES_USER=traininglog \
+            -e POSTGRES_PASSWORD=traininglog \
+            -e POSTGRES_DB=training_log \
+            -p 5432:5432 \
+            "${POSTGRES_IMAGE}"
+
+      - name: Wait for Postgres readiness
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec training-log-mobile-postgres pg_isready -U traininglog -d training_log >/dev/null 2>&1; then
+              echo "Postgres is ready."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Timed out waiting for Postgres."
+          docker logs training-log-mobile-postgres || true
+          exit 1
+
+      - name: Install Azure Functions Core Tools
+        run: npm i -g azure-functions-core-tools@4 --unsafe-perm true
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Apply database schema
+        run: |
+          npm install -g wait-port
+          wait-port 127.0.0.1:5432 --timeout 30000
+          PGPASSWORD=traininglog psql -h 127.0.0.1 -U traininglog -d training_log -f schema.sql
+
+      - name: Build API and Frontend
+        run: npm run build && npm run build:api
+
       - name: Run mobile Playwright tests (iOS + Android)
-        run: npm run test:e2e:mobile
+        run: |
+          npm run dev:api:func >/tmp/func.log 2>&1 &
+          API_PID=$!
+          cleanup() {
+            kill "${API_PID}" 2>/dev/null || true
+          }
+          trap cleanup EXIT INT TERM
+          if ! npx wait-on http://127.0.0.1:7071 --timeout 90000; then
+            echo "Backend failed to start. Function logs:"
+            cat /tmp/func.log
+            exit 1
+          fi
+          sleep 2
+          npm run test:e2e:mobile
+        env:
+          SESSION_SECRET: ci-mobile-session-secret
+          AzureWebJobsStorage: UseDevelopmentStorage=true
+          FUNCTIONS_WORKER_RUNTIME: node
+          DISABLE_TIMER_TRIGGERS: "true"
+          DATABASE_URL: postgresql://traininglog:traininglog@127.0.0.1:5432/training_log?sslmode=disable
+
+      - name: Stop Postgres container
+        if: always()
+        run: docker stop training-log-mobile-postgres || true
+
+      - name: Publish test results
+        if: always()
+        uses: mikepenz/action-junit-report@v6
+        with:
+          report_paths: "blog/test-results/e2e-junit.xml"
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-mobile
+          path: blog/playwright-report/
+          if-no-files-found: ignore
+
+      - name: Upload Playwright test artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-test-results-mobile
+          path: blog/test-results/
+          if-no-files-found: ignore
 
   checkov-scan:
     name: Infrastructure Security Scan (Checkov)
@@ -144,7 +260,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -154,7 +270,10 @@ jobs:
           python-version: "3.x"
 
       - name: Install Checkov
-        run: pip install checkov
+        run: pip install checkov==3.3.0
+
+      - name: Show Checkov version
+        run: checkov --version
 
       - name: Run Checkov scan on OpenTofu
         run: |

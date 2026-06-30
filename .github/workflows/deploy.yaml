@@ -375,7 +375,7 @@ jobs:
             -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
             -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
             -var="cloudflare_proxied=false" \
-            -var="enable_custom_domain=false" \
+            -var="enable_custom_domain=true" \
             -var="allow_azure_services_postgres=false" \
             -var="manage_blog_validation_record=false"
 

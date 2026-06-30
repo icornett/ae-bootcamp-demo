@@ -796,7 +796,7 @@ jobs:
           }
           trap cleanup_sql_runner EXIT
 
-          SEED_COMMAND='sh -lc '\''printf "%s" "$SCHEMA_SQL_B64" | base64 -d | psql "$DATABASE_URL" -v ON_ERROR_STOP=1 && printf "%s" "$SEED_SQL_B64" | base64 -d | psql "$DATABASE_URL" -v ON_ERROR_STOP=1'\''
+          SEED_COMMAND="sh -lc 'printf \"%s\" \"\$SCHEMA_SQL_B64\" | base64 -d | psql \"\$DATABASE_URL\" -v ON_ERROR_STOP=1 && printf \"%s\" \"\$SEED_SQL_B64\" | base64 -d | psql \"\$DATABASE_URL\" -v ON_ERROR_STOP=1'"
 
           az container create \
             --resource-group "$RESOURCE_GROUP_NAME" \
@@ -1040,7 +1040,7 @@ jobs:
           }
           trap cleanup_sql_runner EXIT
 
-          SCHEMA_COMMAND='sh -lc '\''printf "%s" "$SCHEMA_SQL_B64" | base64 -d | psql "$DATABASE_URL" -v ON_ERROR_STOP=1'\''
+          SCHEMA_COMMAND="sh -lc 'printf \"%s\" \"\$SCHEMA_SQL_B64\" | base64 -d | psql \"\$DATABASE_URL\" -v ON_ERROR_STOP=1'"
 
           az container create \
             --resource-group "$RESOURCE_GROUP_NAME" \

@@ -230,37 +230,6 @@ Related files:
 
 ---
 
-### Pattern: Topaz preflight lane (future feature)
-
-Context:
-
-- Infrastructure workflows depend on Azure connectivity and credentials for plan/apply.
-
-Problem:
-
-- Full Azure-backed validation can be slower and credential-sensitive for early iteration.
-
-Solution:
-
-- Add a non-blocking GitHub Actions lane using Topaz as a local Azure emulator for fast Terraform/OpenTofu preflight and RBAC behavior checks.
-- Keep existing Azure-backed plan/deploy and real-database E2E jobs as the release gates.
-
-Example:
-
-```yaml
-jobs:
-    topaz-preflight:
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
-```
-
-Related files:
-
-- .github/workflows/deploy.yaml
-- README.md
-
----
-
 ### Pattern: Infracost diagnostics toggle limitation
 
 Context:

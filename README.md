@@ -156,11 +156,6 @@ Scheduled purge behavior:
 - `CF_API_TOKEN`
 - `CF_ZONE_ID`
 
-## Future features
-
-- Add a non-blocking Topaz preflight workflow for local Azure emulation of Terraform/OpenTofu validation and RBAC behavior checks.
-- Keep Azure-backed deploy and real-db E2E workflows as the production-truth gates; Topaz should provide fast shift-left feedback only.
-
 ## Infracost diagnostics note
 
 - Workspace setting `.vscode/settings.json` currently sets `infracost.enableDiagnostics=false`.

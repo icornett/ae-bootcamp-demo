@@ -1351,6 +1351,33 @@ jobs:
         working-directory: blog
         run: npm run test:e2e:real-db
 
+      - name: Tear down SQL runner
+        if: always()
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          RESOURCE_GROUP_NAME="$(tofu output -raw resource_group_name 2>/dev/null || true)"
+          SUBSCRIPTION_SUFFIX="${ARM_SUBSCRIPTION_ID:0:8}"
+          SQL_RUNNER_NAME="workout-sql-runner-${SUBSCRIPTION_SUFFIX}"
+
+          if [ -z "$RESOURCE_GROUP_NAME" ]; then
+            echo "Could not determine resource group; skipping SQL runner cleanup."
+            exit 0
+          fi
+
+          if az container show --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" >/dev/null 2>&1; then
+            echo "Deleting SQL runner: $SQL_RUNNER_NAME"
+            az container delete \
+              --resource-group "$RESOURCE_GROUP_NAME" \
+              --name "$SQL_RUNNER_NAME" \
+              --yes
+            echo "SQL runner deleted."
+          else
+            echo "SQL runner not found; nothing to clean up."
+          fi
+
       - name: Upload Playwright test results
         if: always()
         uses: actions/upload-artifact@v7

@@ -312,18 +312,44 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          API_URL="https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls"
-          RESPONSE="$(curl -fsSL \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "$API_URL")"
+          check_commit_for_pr() {
+            local sha="$1"
+            local url="https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$sha/pulls"
+            curl -fsSL \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "$url"
+          }
 
+          RESPONSE="$(check_commit_for_pr "$GITHUB_SHA")"
           PR_COUNT="$(printf '%s' "$RESPONSE" | jq 'length')"
           PR_NUMBERS="$(printf '%s' "$RESPONSE" | jq -r 'map(.number | tostring) | join(", ")')"
 
           if [ "$PR_COUNT" -gt 0 ]; then
             echo "Commit $GITHUB_SHA is associated with PR(s): $PR_NUMBERS"
             exit 0
+          fi
+
+          # For standard merge commits, the merge commit itself is not in the PR's
+          # commit list. Check whether this is a merge commit (2 parents) and
+          # verify the second parent (the feature-branch tip) belongs to a PR.
+          COMMIT_DATA="$(curl -fsSL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA")"
+
+          PARENT_COUNT="$(printf '%s' "$COMMIT_DATA" | jq '.parents | length')"
+
+          if [ "$PARENT_COUNT" -gt 1 ]; then
+            PARENT_SHA="$(printf '%s' "$COMMIT_DATA" | jq -r '.parents[1].sha')"
+            PARENT_RESPONSE="$(check_commit_for_pr "$PARENT_SHA")"
+            PARENT_PR_COUNT="$(printf '%s' "$PARENT_RESPONSE" | jq 'length')"
+            PARENT_PR_NUMBERS="$(printf '%s' "$PARENT_RESPONSE" | jq -r 'map(.number | tostring) | join(", ")')"
+
+            if [ "$PARENT_PR_COUNT" -gt 0 ]; then
+              echo "Merge commit $GITHUB_SHA is from PR(s): $PARENT_PR_NUMBERS"
+              exit 0
+            fi
           fi
 
           echo "Direct pushes to main are not allowed. Merge through a pull request instead."

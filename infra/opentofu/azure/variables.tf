@@ -79,3 +79,15 @@ variable "manage_key_vault_role_assignments" {
   type        = bool
   default     = false
 }
+
+variable "bootstrap_runner_rbac" {
+  description = "One-time bootstrap toggle: grant the GitHub deploy principal baseline RBAC using Terraform (run with elevated credentials)."
+  type        = bool
+  default     = false
+}
+
+variable "github_runner_object_id" {
+  description = "Object ID of the GitHub Actions deploy service principal to bootstrap with RBAC permissions."
+  type        = string
+  default     = null
+}

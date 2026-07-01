@@ -271,12 +271,30 @@ resource "azurerm_role_assignment" "key_vault_ci" {
   principal_id         = var.key_vault_ci_object_id
 }
 
+# One-time pure-IaC bootstrap for the GitHub deploy principal.
+# Apply with elevated credentials and `bootstrap_runner_rbac=true`.
+resource "azurerm_role_assignment" "bootstrap_runner_uaa" {
+  count                = var.bootstrap_runner_rbac && var.github_runner_object_id != null ? 1 : 0
+  scope                = azurerm_resource_group.main.id
+  role_definition_name = "User Access Administrator"
+  principal_id         = var.github_runner_object_id
+}
+
+resource "azurerm_role_assignment" "bootstrap_runner_kv_officer" {
+  count                = var.bootstrap_runner_rbac && var.github_runner_object_id != null ? 1 : 0
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = var.github_runner_object_id
+}
+
 resource "time_sleep" "key_vault_rbac_propagation" {
   create_duration = var.key_vault_rbac_wait_duration
 
   depends_on = [
     azurerm_role_assignment.key_vault_deployer,
     azurerm_role_assignment.key_vault_ci,
+    azurerm_role_assignment.bootstrap_runner_uaa,
+    azurerm_role_assignment.bootstrap_runner_kv_officer,
   ]
 }
 

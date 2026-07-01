@@ -166,11 +166,11 @@ resource "azurerm_private_dns_zone_virtual_network_link" "postgresql" {
 resource "azurerm_key_vault" "main" {
   #checkov:skip=CKV_AZURE_189: Public network access remains required for GitHub-hosted runners and SWA-managed functions; private endpoints are added for controlled private connectivity paths.
   #checkov:skip=CKV_AZURE_109: Firewall/network ACL restrictions are intentionally deferred to keep CI and managed runtime secret retrieval working.
-  name                       = "workout-kv-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
-  resource_group_name        = azurerm_resource_group.main.name
-  location                   = azurerm_resource_group.main.location
-  tenant_id                  = data.azurerm_client_config.current.tenant_id
-  sku_name                   = "standard"
+  name                = "workout-kv-${substr(data.azurerm_client_config.current.subscription_id, 0, 8)}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  tenant_id           = data.azurerm_client_config.current.tenant_id
+  sku_name            = "standard"
   # Keep the existing vault permission model to avoid requiring permission-model mutation rights in CI.
   enable_rbac_authorization  = data.azurerm_key_vault.existing_main.enable_rbac_authorization
   soft_delete_retention_days = 7
@@ -240,7 +240,7 @@ resource "azurerm_private_endpoint" "postgresql" {
 }
 
 resource "azurerm_postgresql_flexible_server_firewall_rule" "azure_services" {
-  #checkov:skip=CKV2_AZURE_26: This rule is disabled by default and only exists as explicit break-glass access; private endpoint connectivity is the secure default.
+  #checkov:skip=CKV2_AZURE_26: Azure Static Web App managed Functions run in a shared multi-tenant environment and cannot be VNet-integrated. The 0.0.0.0/0.0.0.0 Azure-services rule is required for SWA-hosted API functions to reach the PostgreSQL server. The private endpoint and private DNS zone remain in place to restrict all non-Azure-service access paths. Tracked for removal if the API is migrated to a VNet-integrated compute option.
   count            = var.allow_azure_services_postgres ? 1 : 0
   name             = "allow-azure-services"
   server_id        = azurerm_postgresql_flexible_server.main.id

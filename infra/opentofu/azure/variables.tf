@@ -63,7 +63,7 @@ variable "enable_user_assigned_identity" {
 }
 
 variable "allow_azure_services_postgres" {
-  description = "Whether to keep PostgreSQL firewall rule 0.0.0.0/0.0.0.0 (Allow Azure services). Disable only after all consumers use private networking paths."
+  description = "Adds the PostgreSQL 0.0.0.0/0.0.0.0 Azure-services firewall rule required for Azure Static Web App managed Functions (which cannot be VNet-integrated) to reach the server. Keep true while the API runs as SWA managed functions; disable only after migrating to a VNet-integrated compute option."
   type        = bool
   default     = false
 }

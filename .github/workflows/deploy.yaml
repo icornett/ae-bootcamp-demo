@@ -1046,7 +1046,8 @@ jobs:
             -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
             -var="enable_custom_domain=true" \
             -var="allow_azure_services_postgres=false" \
-            -var="manage_blog_validation_record=false"
+            -var="manage_blog_validation_record=false" \
+            -var="manage_key_vault_role_assignments=true"
 
       - name: Wait For Public DNS Propagation
         run: |

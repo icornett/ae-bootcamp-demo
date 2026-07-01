@@ -67,6 +67,7 @@ Managed Functions -> Application Insights -> Log Analytics Workspace
 | `enable_user_assigned_identity` | `false` | No | Create an optional user-assigned managed identity with Key Vault secret read rights |
 | `key_vault_ci_object_id` | `null` | No | Optional CI/CD principal object ID to grant Key Vault secret read access |
 | `key_vault_rbac_wait_duration` | `30s` | No | RBAC propagation delay before Key Vault secret reads/writes |
+| `manage_key_vault_role_assignments` | `false` | No | Whether OpenTofu creates/updates Key Vault RBAC role assignments (requires `Microsoft.Authorization/roleAssignments/write`) |
 
 Sensitive inputs:
 
@@ -116,7 +117,7 @@ SQL runner behavior (private-only path):
 
 Main deploy phases:
 
-- Single Terraform apply with `enable_custom_domain=true`, `cloudflare_proxied=true` (enabled by default), `allow_azure_services_postgres=false`, and `manage_blog_validation_record=false`.
+- Single Terraform apply with `enable_custom_domain=true`, `cloudflare_proxied=true` (enabled by default), `allow_azure_services_postgres=false`, `manage_blog_validation_record=false`, and `manage_key_vault_role_assignments=true`.
 - Wait for DNS propagation (`dig` CNAME check).
 - Apply PostgreSQL schema through a private SQL runner ACI.
 - Build the Vite app in GitHub Actions with Node 24.

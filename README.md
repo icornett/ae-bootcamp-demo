@@ -201,6 +201,15 @@ tofu apply \
 
 After bootstrap, set `bootstrap_runner_rbac=false` (default) for normal runs.
 
+You can run the same bootstrap via GitHub Actions using the manual workflow:
+
+- Workflow: `.github/workflows/bootstrap-kv-rbac.yaml`
+- Trigger: `workflow_dispatch`
+- Required input: `deploy_principal_object_id`
+- Optional input: `ci_principal_object_id` (defaults to deploy principal)
+
+This workflow executes a targeted `tofu apply` for role-assignment resources only.
+
 ## Repository layout
 
 ```text

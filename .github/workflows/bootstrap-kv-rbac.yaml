@@ -1,0 +1,76 @@
+name: Bootstrap Key Vault RBAC
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_principal_object_id:
+        description: "Object ID of the GitHub deploy service principal"
+        required: true
+        type: string
+      ci_principal_object_id:
+        description: "Optional object ID for CI Key Vault Secrets User grant (defaults to deploy principal)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  bootstrap-kv-rbac:
+    name: Bootstrap Key Vault RBAC
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/opentofu/azure
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Azure Login
+        uses: azure/login@v3
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v2
+
+      - name: Tofu Init
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: tofu init
+
+      - name: Bootstrap RBAC role assignments (targeted apply)
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          DEPLOY_PRINCIPAL_OBJECT_ID: ${{ github.event.inputs.deploy_principal_object_id }}
+          CI_PRINCIPAL_OBJECT_ID: ${{ github.event.inputs.ci_principal_object_id }}
+        run: |
+          test -n "$DEPLOY_PRINCIPAL_OBJECT_ID" || { echo "deploy_principal_object_id is required"; exit 1; }
+
+          EFFECTIVE_CI_OBJECT_ID="$CI_PRINCIPAL_OBJECT_ID"
+          if [ -z "$EFFECTIVE_CI_OBJECT_ID" ]; then
+            EFFECTIVE_CI_OBJECT_ID="$DEPLOY_PRINCIPAL_OBJECT_ID"
+          fi
+
+          tofu apply -auto-approve \
+            -target=azurerm_role_assignment.bootstrap_runner_uaa \
+            -target=azurerm_role_assignment.bootstrap_runner_kv_officer \
+            -target=azurerm_role_assignment.key_vault_ci \
+            -var="cf_api_token=${{ secrets.CF_API_TOKEN }}" \
+            -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
+            -var="bootstrap_runner_rbac=true" \
+            -var="manage_key_vault_role_assignments=true" \
+            -var="github_runner_object_id=$DEPLOY_PRINCIPAL_OBJECT_ID" \
+            -var="key_vault_ci_object_id=$EFFECTIVE_CI_OBJECT_ID"
+
+      - name: Output bootstrap reminder
+        run: |
+          echo "Bootstrap complete."
+          echo "Use normal deploy workflow with bootstrap_runner_rbac=false (default)."

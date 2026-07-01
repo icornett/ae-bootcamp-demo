@@ -73,3 +73,9 @@ variable "key_vault_rbac_wait_duration" {
   type        = string
   default     = "30s"
 }
+
+variable "manage_key_vault_role_assignments" {
+  description = "Whether Terraform should create/update Key Vault RBAC role assignments. Disable in CI when the deploy principal cannot manage role assignments."
+  type        = bool
+  default     = false
+}

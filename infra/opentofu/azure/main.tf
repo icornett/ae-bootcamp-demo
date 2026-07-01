@@ -171,7 +171,8 @@ resource "azurerm_key_vault" "main" {
   location                   = azurerm_resource_group.main.location
   tenant_id                  = data.azurerm_client_config.current.tenant_id
   sku_name                   = "standard"
-  enable_rbac_authorization  = true
+  # Keep the existing vault permission model to avoid requiring permission-model mutation rights in CI.
+  enable_rbac_authorization  = data.azurerm_key_vault.existing_main.enable_rbac_authorization
   soft_delete_retention_days = 7
   purge_protection_enabled   = true
 
@@ -257,13 +258,14 @@ resource "azurerm_user_assigned_identity" "runtime" {
 }
 
 resource "azurerm_role_assignment" "key_vault_deployer" {
+  count                = var.manage_key_vault_role_assignments ? 1 : 0
   scope                = azurerm_key_vault.main.id
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = data.azurerm_client_config.current.object_id
 }
 
 resource "azurerm_role_assignment" "key_vault_ci" {
-  count                = var.key_vault_ci_object_id != null ? 1 : 0
+  count                = var.manage_key_vault_role_assignments && var.key_vault_ci_object_id != null ? 1 : 0
   scope                = azurerm_key_vault.main.id
   role_definition_name = "Key Vault Secrets User"
   principal_id         = var.key_vault_ci_object_id

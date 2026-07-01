@@ -1013,6 +1013,27 @@ jobs:
           ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: tofu init
 
+      - name: Import existing VNet into state (if present)
+        env:
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          RESOURCE_GROUP_NAME="$(tofu output -raw resource_group_name)"
+          SUBSCRIPTION_SUFFIX="${ARM_SUBSCRIPTION_ID:0:8}"
+          VNET_NAME="workout-vnet-${SUBSCRIPTION_SUFFIX}"
+          VNET_ID="/subscriptions/${ARM_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.Network/virtualNetworks/${VNET_NAME}"
+
+          if tofu state show azurerm_virtual_network.private_endpoints >/dev/null 2>&1; then
+            echo "VNet already managed in state."
+            exit 0
+          fi
+
+          if az network vnet show --resource-group "$RESOURCE_GROUP_NAME" --name "$VNET_NAME" >/dev/null 2>&1; then
+            echo "Importing existing VNet into state: ${VNET_NAME}"
+            tofu import azurerm_virtual_network.private_endpoints "$VNET_ID"
+          else
+            echo "No pre-existing VNet named ${VNET_NAME}; normal create path will be used."
+          fi
+
       - name: Tofu Apply (Provision Infrastructure + Bind Custom Domain)
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}

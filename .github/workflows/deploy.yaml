@@ -554,62 +554,6 @@ jobs:
           echo "url=$STAGING_URL" >> "$GITHUB_OUTPUT"
           echo "Staging deployment URL: $STAGING_URL"
 
-      - name: Map staging domain in Cloudflare
-        env:
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
-        run: |
-          STAGING_DOMAIN="gym-stg.digitaldelirium.tech"
-          STAGING_HOST="${{ steps.staging_env.outputs.host }}"
-          RECORD_NAME="${STAGING_DOMAIN%%.digitaldelirium.tech}"
-
-          echo "Ensuring Cloudflare CNAME ${STAGING_DOMAIN} -> ${STAGING_HOST}"
-
-          EXISTING_RECORD_ID="$(curl -fsSL \
-            -H "Authorization: Bearer $CF_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=CNAME&name=$STAGING_DOMAIN" | jq -r '.result[0].id // empty')"
-
-          if [ -n "$EXISTING_RECORD_ID" ]; then
-            curl -fsSL -X PUT \
-              -H "Authorization: Bearer $CF_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$EXISTING_RECORD_ID" \
-              --data "{\"type\":\"CNAME\",\"name\":\"$RECORD_NAME\",\"content\":\"$STAGING_HOST\",\"ttl\":60,\"proxied\":false}" >/dev/null
-            echo "Updated existing Cloudflare staging CNAME"
-          else
-            curl -fsSL -X POST \
-              -H "Authorization: Bearer $CF_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records" \
-              --data "{\"type\":\"CNAME\",\"name\":\"$RECORD_NAME\",\"content\":\"$STAGING_HOST\",\"ttl\":60,\"proxied\":false}" >/dev/null
-            echo "Created Cloudflare staging CNAME"
-          fi
-
-      - name: Verify staging DNS mapping
-        run: |
-          STAGING_DOMAIN="gym-stg.digitaldelirium.tech"
-          EXPECTED_HOST="${{ steps.staging_env.outputs.host }}"
-
-          echo "Waiting for ${STAGING_DOMAIN} to resolve to ${EXPECTED_HOST}"
-
-          for i in {1..40}; do
-            CNAME_TARGET="$(dig +short CNAME "$STAGING_DOMAIN" | sed 's/\.$//' | head -n 1)"
-            if [ "$CNAME_TARGET" = "$EXPECTED_HOST" ]; then
-              echo "Staging DNS is correctly mapped."
-              exit 0
-            fi
-
-            echo "Attempt $i/40: cname='${CNAME_TARGET}' expected='${EXPECTED_HOST}' (waiting 15s)"
-            sleep 15
-          done
-
-          echo "Staging DNS mapping check failed."
-          dig +short CNAME "$STAGING_DOMAIN" || true
-          dig +short A "$STAGING_DOMAIN" || true
-          dig +short AAAA "$STAGING_DOMAIN" || true
-          exit 1
-
       - name: Comment staging URL on PR
         if: success()
         uses: actions/github-script@v9
@@ -619,8 +563,7 @@ jobs:
             const prNumber = context.payload.pull_request.number;
             const body = [
               '### Staging Deployment Ready',
-              `- URL: ${{ steps.staging_url.outputs.url }}`,
-              `- DNS: gym-stg.digitaldelirium.tech -> ${{ steps.staging_env.outputs.host }}`
+              `- URL: ${{ steps.staging_url.outputs.url }}`
             ].join('\n');
 
             await github.rest.issues.createComment({
@@ -749,62 +692,6 @@ jobs:
           echo "host=$STAGING_HOST" >> "$GITHUB_OUTPUT"
           echo "Resolved staging URL: $STAGING_URL"
           echo "Resolved staging host: $STAGING_HOST"
-
-      - name: Map staging domain in Cloudflare
-        env:
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
-        run: |
-          STAGING_DOMAIN="gym-stg.digitaldelirium.tech"
-          STAGING_HOST="${{ steps.staging_env.outputs.host }}"
-          RECORD_NAME="${STAGING_DOMAIN%%.digitaldelirium.tech}"
-
-          echo "Ensuring Cloudflare CNAME ${STAGING_DOMAIN} -> ${STAGING_HOST}"
-
-          EXISTING_RECORD_ID="$(curl -fsSL \
-            -H "Authorization: Bearer $CF_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=CNAME&name=$STAGING_DOMAIN" | jq -r '.result[0].id // empty')"
-
-          if [ -n "$EXISTING_RECORD_ID" ]; then
-            curl -fsSL -X PUT \
-              -H "Authorization: Bearer $CF_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$EXISTING_RECORD_ID" \
-              --data "{\"type\":\"CNAME\",\"name\":\"$RECORD_NAME\",\"content\":\"$STAGING_HOST\",\"ttl\":60,\"proxied\":false}" >/dev/null
-            echo "Updated existing Cloudflare staging CNAME"
-          else
-            curl -fsSL -X POST \
-              -H "Authorization: Bearer $CF_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records" \
-              --data "{\"type\":\"CNAME\",\"name\":\"$RECORD_NAME\",\"content\":\"$STAGING_HOST\",\"ttl\":60,\"proxied\":false}" >/dev/null
-            echo "Created Cloudflare staging CNAME"
-          fi
-
-      - name: Verify staging DNS mapping
-        run: |
-          STAGING_DOMAIN="gym-stg.digitaldelirium.tech"
-          EXPECTED_HOST="${{ steps.staging_env.outputs.host }}"
-
-          echo "Waiting for ${STAGING_DOMAIN} to resolve to ${EXPECTED_HOST}"
-
-          for i in {1..40}; do
-            CNAME_TARGET="$(dig +short CNAME "$STAGING_DOMAIN" | sed 's/\.$//' | head -n 1)"
-            if [ "$CNAME_TARGET" = "$EXPECTED_HOST" ]; then
-              echo "Staging DNS is correctly mapped."
-              exit 0
-            fi
-
-            echo "Attempt $i/40: cname='${CNAME_TARGET}' expected='${EXPECTED_HOST}' (waiting 15s)"
-            sleep 15
-          done
-
-          echo "Staging DNS mapping check failed."
-          dig +short CNAME "$STAGING_DOMAIN" || true
-          dig +short A "$STAGING_DOMAIN" || true
-          dig +short AAAA "$STAGING_DOMAIN" || true
-          exit 1
 
   real-db-e2e:
     name: Real DB E2E (Staging)
@@ -967,10 +854,9 @@ jobs:
           compression-level: 9
 
   close-preview:
-    name: Close Preview (Merge/Close)
+    name: Close Staging Preview (Merge)
     runs-on: ubuntu-latest
-    # pull_request.closed is emitted for both merged PRs and manually closed PRs.
-    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       id-token: write
       contents: read
@@ -1013,6 +899,7 @@ jobs:
           app_location: blog/dist
           api_location: blog/api
           action: close
+          deployment_environment: staging
           azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
 
   deploy:

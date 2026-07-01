@@ -95,11 +95,31 @@ jobs:
           npm install --no-save @stoplight/spectral-cli @stoplight/spectral-rulesets
           npx spectral lint specs/openapi/blog-api.yaml
 
+  detect-blog-changes:
+    name: Detect Blog Changes
+    runs-on: ubuntu-latest
+    if: github.event_name != 'repository_dispatch' && (github.event_name != 'pull_request' || github.event.action != 'closed')
+    outputs:
+      blog_changed: ${{ steps.filter.outputs.blog }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect blog path changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            blog:
+              - 'blog'
+              - 'blog/**'
+
   web-coverage:
     name: Web Quality Gates
     runs-on: ubuntu-latest
     if: github.event_name != 'repository_dispatch' && (github.event_name != 'pull_request' || github.event.action != 'closed')
-    needs: validate-specs
+    needs: [validate-specs, detect-blog-changes]
     env:
       POSTGRES_IMAGE: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
     defaults:
@@ -110,13 +130,19 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Skip blog tests when blog is unchanged
+        if: needs.detect-blog-changes.outputs.blog_changed != 'true'
+        run: echo "No blog changes detected; skipping Web Quality Gates test execution."
+
       - name: Use blog submodule commit from PR
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: |
           git -C "$GITHUB_WORKSPACE" submodule sync --recursive
           git -C "$GITHUB_WORKSPACE" submodule update --init --recursive blog
           echo "Using blog submodule revision from PR: $(git -C "$GITHUB_WORKSPACE/blog" rev-parse --short HEAD)"
 
       - name: Setup Node.js
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -126,17 +152,21 @@ jobs:
             blog/api/package-lock.json
 
       - name: Install dependencies
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: |
           npm ci --ignore-scripts
           npm --prefix api ci
 
       - name: Run web tests with coverage
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: npm run test:web:ci
 
       - name: Install Playwright browsers
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: npx playwright install --with-deps chromium webkit
 
       - name: Compute Postgres image manifest fingerprint
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         id: docker-manifest-hash-mobile
         run: |
           set -eu
@@ -144,6 +174,7 @@ jobs:
           echo "postgres_hash=${postgres_hash}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore cached Postgres image
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         id: docker-cache-postgres-mobile
         uses: actions/cache@v6
         with:
@@ -151,6 +182,7 @@ jobs:
           key: docker-${{ runner.os }}-postgres-16-alpine-${{ steps.docker-manifest-hash-mobile.outputs.postgres_hash }}
 
       - name: Load or pull Postgres image
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: |
           mkdir -p /tmp/.docker-cache/postgres
           if [ -f /tmp/.docker-cache/postgres/postgres-16-alpine.tar ]; then
@@ -160,12 +192,13 @@ jobs:
           fi
 
       - name: Save Postgres image to cache
-        if: steps.docker-cache-postgres-mobile.outputs.cache-hit != 'true'
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true' && steps.docker-cache-postgres-mobile.outputs.cache-hit != 'true'
         run: |
           mkdir -p /tmp/.docker-cache/postgres
           docker save "${POSTGRES_IMAGE}" -o /tmp/.docker-cache/postgres/postgres-16-alpine.tar
 
       - name: Start Postgres container
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: |
           docker run -d --rm \
             --name training-log-mobile-postgres \
@@ -176,6 +209,7 @@ jobs:
             "${POSTGRES_IMAGE}"
 
       - name: Wait for Postgres readiness
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: |
           for i in $(seq 1 30); do
             if docker exec training-log-mobile-postgres pg_isready -U traininglog -d training_log >/dev/null 2>&1; then
@@ -189,22 +223,27 @@ jobs:
           exit 1
 
       - name: Install Azure Functions Core Tools
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: npm i -g azure-functions-core-tools@4 --unsafe-perm true
 
       - name: Install PostgreSQL client
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
       - name: Apply database schema
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: |
           npx --yes wait-port 127.0.0.1:5432 --timeout 30000
           PGPASSWORD=traininglog psql -h 127.0.0.1 -U traininglog -d training_log -f schema.sql
 
       - name: Build API and Frontend
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: npm run build && npm run build:api
 
       - name: Run mobile Playwright tests (iOS + Android)
+        if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: |
           npm run dev:api:func >/tmp/func.log 2>&1 &
           API_PID=$!
@@ -227,17 +266,17 @@ jobs:
           DATABASE_URL: postgresql://traininglog:traininglog@127.0.0.1:5432/training_log?sslmode=disable
 
       - name: Stop Postgres container
-        if: always()
+        if: always() && needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: docker stop training-log-mobile-postgres || true
 
       - name: Publish test results
-        if: always()
+        if: always() && needs.detect-blog-changes.outputs.blog_changed == 'true'
         uses: mikepenz/action-junit-report@v6
         with:
           report_paths: "blog/test-results/e2e-junit.xml"
 
       - name: Upload Playwright report
-        if: always()
+        if: always() && needs.detect-blog-changes.outputs.blog_changed == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report-mobile
@@ -245,7 +284,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload Playwright test artifacts
-        if: always()
+        if: always() && needs.detect-blog-changes.outputs.blog_changed == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: playwright-test-results-mobile
@@ -770,8 +809,8 @@ jobs:
   real-db-e2e:
     name: Real DB E2E (Staging)
     runs-on: ubuntu-latest
-    needs: staging-deploy
-    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [staging-deploy, detect-blog-changes]
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository && needs.detect-blog-changes.outputs.blog_changed == 'true'
     permissions:
       id-token: write
       contents: read
@@ -1013,6 +1052,67 @@ jobs:
           ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: tofu init
 
+      - name: Import existing VNet into state (if present)
+        env:
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          RESOURCE_GROUP_NAME="$(tofu output -raw resource_group_name)"
+          SUBSCRIPTION_SUFFIX="${ARM_SUBSCRIPTION_ID:0:8}"
+          VNET_NAME="workout-vnet-${SUBSCRIPTION_SUFFIX}"
+          VNET_ID="/subscriptions/${ARM_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.Network/virtualNetworks/${VNET_NAME}"
+
+          if tofu state show azurerm_virtual_network.private_endpoints >/dev/null 2>&1; then
+            echo "VNet already managed in state."
+            exit 0
+          fi
+
+          if az network vnet show --resource-group "$RESOURCE_GROUP_NAME" --name "$VNET_NAME" >/dev/null 2>&1; then
+            echo "Importing existing VNet into state: ${VNET_NAME}"
+            tofu import azurerm_virtual_network.private_endpoints "$VNET_ID"
+          else
+            echo "No pre-existing VNet named ${VNET_NAME}; normal create path will be used."
+          fi
+
+      - name: Fail Fast if deploy principal lacks required RBAC
+        env:
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        run: |
+          RESOURCE_GROUP_NAME="$(tofu output -raw resource_group_name)"
+          KEY_VAULT_NAME="$(tofu output -raw key_vault_name)"
+
+          RG_SCOPE="/subscriptions/${ARM_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP_NAME}"
+          KV_SCOPE="$(az keyvault show --name "$KEY_VAULT_NAME" --resource-group "$RESOURCE_GROUP_NAME" --query id -o tsv)"
+
+          role_count() {
+            local scope="$1"
+            local role="$2"
+            az role assignment list \
+              --assignee "$ARM_CLIENT_ID" \
+              --scope "$scope" \
+              --include-inherited \
+              --query "[?roleDefinitionName=='${role}'] | length(@)" \
+              -o tsv
+          }
+
+          HAS_UAA="$(role_count "$RG_SCOPE" "User Access Administrator")"
+          HAS_OWNER="$(role_count "$RG_SCOPE" "Owner")"
+          HAS_KV_OFFICER="$(role_count "$KV_SCOPE" "Key Vault Secrets Officer")"
+
+          if [ "$HAS_UAA" -eq 0 ] && [ "$HAS_OWNER" -eq 0 ]; then
+            echo "Missing required control-plane role for deploy principal."
+            echo "Need 'User Access Administrator' or 'Owner' at scope: $RG_SCOPE"
+            exit 1
+          fi
+
+          if [ "$HAS_KV_OFFICER" -eq 0 ]; then
+            echo "Missing required Key Vault data-plane role for deploy principal."
+            echo "Need 'Key Vault Secrets Officer' at scope: $KV_SCOPE"
+            exit 1
+          fi
+
+          echo "RBAC preflight passed: deploy principal has required roles."
+
       - name: Tofu Apply (Provision Infrastructure + Bind Custom Domain)
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -1025,7 +1125,8 @@ jobs:
             -var="cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
             -var="enable_custom_domain=true" \
             -var="allow_azure_services_postgres=false" \
-            -var="manage_blog_validation_record=false"
+            -var="manage_blog_validation_record=false" \
+            -var="manage_key_vault_role_assignments=true"
 
       - name: Wait For Public DNS Propagation
         run: |

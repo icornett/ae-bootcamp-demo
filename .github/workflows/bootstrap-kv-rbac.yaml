@@ -3,9 +3,9 @@ name: Bootstrap Key Vault RBAC
 on:
   workflow_dispatch:
     inputs:
-      deploy_principal_object_id:
-        description: "Object ID of the GitHub deploy service principal"
-        required: true
+      deploy_principal_object_id_override:
+        description: "Optional override: object ID of the GitHub deploy service principal (normally auto-resolved from AZURE_CLIENT_ID)"
+        required: false
         type: string
       ci_principal_object_id:
         description: "Optional object ID for CI Key Vault Secrets User grant (defaults to deploy principal)"
@@ -49,10 +49,16 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
-          DEPLOY_PRINCIPAL_OBJECT_ID: ${{ github.event.inputs.deploy_principal_object_id }}
+          DEPLOY_PRINCIPAL_OBJECT_ID_OVERRIDE: ${{ github.event.inputs.deploy_principal_object_id_override }}
           CI_PRINCIPAL_OBJECT_ID: ${{ github.event.inputs.ci_principal_object_id }}
         run: |
-          test -n "$DEPLOY_PRINCIPAL_OBJECT_ID" || { echo "deploy_principal_object_id is required"; exit 1; }
+          DEPLOY_PRINCIPAL_OBJECT_ID="$DEPLOY_PRINCIPAL_OBJECT_ID_OVERRIDE"
+          if [ -z "$DEPLOY_PRINCIPAL_OBJECT_ID" ]; then
+            DEPLOY_PRINCIPAL_OBJECT_ID="$(az ad sp show --id "$ARM_CLIENT_ID" --query id -o tsv)"
+          fi
+
+          test -n "$DEPLOY_PRINCIPAL_OBJECT_ID" || { echo "Unable to resolve deploy principal object ID; provide deploy_principal_object_id_override"; exit 1; }
+          echo "Resolved deploy principal object ID for bootstrap."
 
           EFFECTIVE_CI_OBJECT_ID="$CI_PRINCIPAL_OBJECT_ID"
           if [ -z "$EFFECTIVE_CI_OBJECT_ID" ]; then

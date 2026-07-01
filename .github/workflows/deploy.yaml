@@ -494,6 +494,73 @@ jobs:
           ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: tofu init
 
+      - name: Apply database schema to staging
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          KEY_VAULT_NAME="$(tofu output -raw key_vault_name)"
+          DATABASE_URL="$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name database-url --query value -o tsv)"
+          RESOURCE_GROUP_NAME="$(tofu output -raw resource_group_name)"
+          SUBSCRIPTION_SUFFIX="${ARM_SUBSCRIPTION_ID:0:8}"
+          SQL_RUNNER_NAME="workout-sql-runner-staging-${SUBSCRIPTION_SUFFIX}"
+          VNET_NAME="workout-vnet-${SUBSCRIPTION_SUFFIX}"
+          SCHEMA_SQL_B64="$(base64 -w0 "$GITHUB_WORKSPACE/blog/schema.sql")"
+
+          cleanup_sql_runner() {
+            az container delete \
+              --resource-group "$RESOURCE_GROUP_NAME" \
+              --name "$SQL_RUNNER_NAME" \
+              --yes \
+              --no-wait >/dev/null 2>&1 || true
+          }
+          trap cleanup_sql_runner EXIT
+
+          SCHEMA_COMMAND="sh -lc 'printf \"%s\" \"\$SCHEMA_SQL_B64\" | base64 -d | psql \"\$DATABASE_URL\" -v ON_ERROR_STOP=1'"
+
+          az container create \
+            --resource-group "$RESOURCE_GROUP_NAME" \
+            --name "$SQL_RUNNER_NAME" \
+            --image "postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416" \
+            --os-type Linux \
+            --cpu 0.5 \
+            --memory 1 \
+            --ip-address Private \
+            --vnet "$VNET_NAME" \
+            --subnet sql-runner \
+            --restart-policy Never \
+            --command-line "$SCHEMA_COMMAND" \
+            --secure-environment-variables \
+            DATABASE_URL="$DATABASE_URL" \
+            SCHEMA_SQL_B64="$SCHEMA_SQL_B64"
+
+          RUN_STATE=""
+          for i in $(seq 1 60); do
+            RUN_STATE="$(az container show --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" --query 'containers[0].instanceView.currentState.state' -o tsv 2>/dev/null || true)"
+            EXIT_CODE="$(az container show --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" --query 'containers[0].instanceView.currentState.exitCode' -o tsv 2>/dev/null || true)"
+
+            if [ "$RUN_STATE" = "Terminated" ]; then
+              if [ "$EXIT_CODE" = "0" ]; then
+                echo "Schema applied to staging successfully."
+                break
+              fi
+
+              echo "Schema apply failed with exit code ${EXIT_CODE:-unknown}."
+              az container logs --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" || true
+              exit 1
+            fi
+
+            echo "Waiting for schema apply to finish (${i}/60)..."
+            sleep 10
+          done
+
+          if [ "$RUN_STATE" != "Terminated" ]; then
+            echo "Schema apply did not finish in time."
+            az container logs --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" || true
+            exit 1
+          fi
+
       - name: Get SWA deployment token
         id: swa_token
         run: echo "token=$(tofu output -raw swa_api_key)" >> "$GITHUB_OUTPUT"
@@ -639,6 +706,73 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: tofu init
+
+      - name: Apply database schema to staging
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          KEY_VAULT_NAME="$(tofu output -raw key_vault_name)"
+          DATABASE_URL="$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name database-url --query value -o tsv)"
+          RESOURCE_GROUP_NAME="$(tofu output -raw resource_group_name)"
+          SUBSCRIPTION_SUFFIX="${ARM_SUBSCRIPTION_ID:0:8}"
+          SQL_RUNNER_NAME="workout-sql-runner-staging-${SUBSCRIPTION_SUFFIX}"
+          VNET_NAME="workout-vnet-${SUBSCRIPTION_SUFFIX}"
+          SCHEMA_SQL_B64="$(base64 -w0 "$GITHUB_WORKSPACE/blog/schema.sql")"
+
+          cleanup_sql_runner() {
+            az container delete \
+              --resource-group "$RESOURCE_GROUP_NAME" \
+              --name "$SQL_RUNNER_NAME" \
+              --yes \
+              --no-wait >/dev/null 2>&1 || true
+          }
+          trap cleanup_sql_runner EXIT
+
+          SCHEMA_COMMAND="sh -lc 'printf \"%s\" \"\$SCHEMA_SQL_B64\" | base64 -d | psql \"\$DATABASE_URL\" -v ON_ERROR_STOP=1'"
+
+          az container create \
+            --resource-group "$RESOURCE_GROUP_NAME" \
+            --name "$SQL_RUNNER_NAME" \
+            --image "postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416" \
+            --os-type Linux \
+            --cpu 0.5 \
+            --memory 1 \
+            --ip-address Private \
+            --vnet "$VNET_NAME" \
+            --subnet sql-runner \
+            --restart-policy Never \
+            --command-line "$SCHEMA_COMMAND" \
+            --secure-environment-variables \
+            DATABASE_URL="$DATABASE_URL" \
+            SCHEMA_SQL_B64="$SCHEMA_SQL_B64"
+
+          RUN_STATE=""
+          for i in $(seq 1 60); do
+            RUN_STATE="$(az container show --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" --query 'containers[0].instanceView.currentState.state' -o tsv 2>/dev/null || true)"
+            EXIT_CODE="$(az container show --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" --query 'containers[0].instanceView.currentState.exitCode' -o tsv 2>/dev/null || true)"
+
+            if [ "$RUN_STATE" = "Terminated" ]; then
+              if [ "$EXIT_CODE" = "0" ]; then
+                echo "Schema applied to staging successfully."
+                break
+              fi
+
+              echo "Schema apply failed with exit code ${EXIT_CODE:-unknown}."
+              az container logs --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" || true
+              exit 1
+            fi
+
+            echo "Waiting for schema apply to finish (${i}/60)..."
+            sleep 10
+          done
+
+          if [ "$RUN_STATE" != "Terminated" ]; then
+            echo "Schema apply did not finish in time."
+            az container logs --resource-group "$RESOURCE_GROUP_NAME" --name "$SQL_RUNNER_NAME" || true
+            exit 1
+          fi
 
       - name: Get SWA deployment token
         id: swa_token

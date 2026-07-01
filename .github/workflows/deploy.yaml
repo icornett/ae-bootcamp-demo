@@ -1055,6 +1055,8 @@ jobs:
       - name: Import existing VNet into state (if present)
         env:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_cf_api_token: ${{ secrets.CF_API_TOKEN }}
+          TF_VAR_cloudflare_zone_id: ${{ secrets.CF_ZONE_ID }}
         run: |
           RESOURCE_GROUP_NAME="$(tofu output -raw resource_group_name)"
           SUBSCRIPTION_SUFFIX="${ARM_SUBSCRIPTION_ID:0:8}"

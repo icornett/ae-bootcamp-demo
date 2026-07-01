@@ -13,10 +13,10 @@ The OpenTofu module provisions:
 
 - Azure Resource Group
 - Azure Key Vault
-- Azure PostgreSQL Flexible Server (plus DB and firewall rule)
+- Azure PostgreSQL Flexible Server (plus DB and optional Azure-services firewall rule)
 - Azure Log Analytics Workspace
 - Azure Application Insights (workspace-based)
-- Azure Static Web App (Free tier) hosting the SPA and managed Functions
+- Azure Static Web App (Standard tier) hosting the SPA and managed Functions
 - Cloudflare CNAME record for the public hostname
 - Optional SWA custom-domain binding (controlled by variable)
 
@@ -32,6 +32,14 @@ Internet
 Observability:
 Managed Functions -> Application Insights -> Log Analytics Workspace
 ```
+
+## Security posture
+
+- PostgreSQL is treated as private data-plane infrastructure; CI and deploy flows keep `allow_azure_services_postgres=false`.
+- Schema and seed SQL run inside a private Azure Container Instance attached to the delegated `sql-runner` subnet, rather than from the public GitHub-hosted runner network path.
+- GitHub-hosted runners use Azure control-plane APIs only (create/poll/log/delete container group) and do not require direct PostgreSQL network reachability.
+- SQL runner image is pinned by digest (`postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416`) so CI behavior is immutable and auditable across runs.
+- Ephemeral SQL runners are workflow-managed and deleted after execution to minimize long-lived attack surface and Terraform state churn.
 
 ## Module location
 
@@ -51,9 +59,14 @@ Managed Functions -> Application Insights -> Log Analytics Workspace
 | `pg_database_name` | `training_log` | No | PostgreSQL database name |
 | `domain` | `gym.digitaldelirium.tech` | No | Public hostname managed in Cloudflare |
 | `cloudflare_zone_id` | none | Yes | Cloudflare zone ID containing `domain` |
-| `cloudflare_proxied` | `false` | No | Whether Cloudflare proxy is enabled for the CNAME |
-| `enable_custom_domain` | `false` | No | Whether Azure SWA custom-domain binding is created |
+| `cloudflare_proxied` | `true` | No | Whether Cloudflare proxy is enabled for the CNAME |
+| `enable_custom_domain` | `true` | No | Whether Azure SWA custom-domain binding is created |
 | `cf_api_token` | none | Yes | Cloudflare API token with DNS read/write + zone read |
+| `manage_blog_validation_record` | `true` | No | Whether OpenTofu manages the SWA TXT validation record in Cloudflare |
+| `allow_azure_services_postgres` | `false` | No | Keeps/removes PostgreSQL `0.0.0.0` Azure-services firewall rule (recommended: keep disabled for private-only connectivity) |
+| `enable_user_assigned_identity` | `false` | No | Create an optional user-assigned managed identity with Key Vault secret read rights |
+| `key_vault_ci_object_id` | `null` | No | Optional CI/CD principal object ID to grant Key Vault secret read access |
+| `key_vault_rbac_wait_duration` | `30s` | No | RBAC propagation delay before Key Vault secret reads/writes |
 
 Sensitive inputs:
 
@@ -70,9 +83,12 @@ Sensitive inputs:
 | `cloudflare_record_hostname` | Public hostname managed by Cloudflare |
 | `pg_server_fqdn` | PostgreSQL server FQDN |
 | `key_vault_name` | Key Vault storing `database-url`, `pg-admin-password`, `session-secret`, and `gdpr-maintenance-token` |
+| `swa_principal_id` | Static Web App system-assigned managed identity principal ID |
 | `application_insights_name` | App Insights resource collecting Functions telemetry |
 | `application_insights_connection_string` | Connection string injected into managed Functions |
 | `log_analytics_workspace_id` | Workspace ID backing App Insights |
+| `runtime_user_assigned_identity_id` | Optional user-assigned managed identity resource ID |
+| `runtime_user_assigned_identity_principal_id` | Optional user-assigned managed identity principal ID |
 
 ## GitHub Actions deployment
 
@@ -87,21 +103,26 @@ Workflow behavior:
 - Real-database test results (videos, screenshots, traces) are published as artifacts for inspection.
 - PR preview, real-db E2E, and `main` deploy jobs refresh the `blog` submodule to the latest `main` revision before building and deploying.
 - `repository_dispatch` events of type `training-log-release` create/update a release PR and enable auto-merge.
-- Pushes to `main` run a multi-phase deploy sequence to avoid custom-domain race conditions.
+- Pushes to `main` run a single OpenTofu apply with private-only PostgreSQL access, followed by DNS wait, private SQL runner seeding, and SWA deployment.
 - A dedicated scheduled workflow calls the GDPR purge endpoint daily to hard-delete users whose deletion retention window has expired.
+
+SQL runner behavior (private-only path):
+
+1. PR real-db E2E always uses a private Azure Container Instance SQL runner to apply schema and test seed data.
+2. Main deploy always uses the same private SQL runner path to apply schema updates.
+3. GitHub-hosted runners interact only with Azure control-plane APIs; no public SQL endpoint is required.
+4. The SQL runner uses a digest-pinned image (`postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416`) for immutable supply-chain behavior.
+5. The SQL runner is intentionally workflow-managed so it does not create Terraform state churn.
 
 Main deploy phases:
 
-1. Single Terraform apply with:
-   - `enable_custom_domain=true`
-   - `cloudflare_proxied=true` (enabled by default)
-   - `manage_blog_validation_record=true` (auto-publish TXT token)
-2. Wait for DNS propagation (`dig` CNAME check).
-3. Build the Vite app in GitHub Actions with Node 25.
-4. Deploy the prebuilt static site plus Functions using `Azure/static-web-apps-deploy@v1` with app build skipping enabled.
-5. Wait for Azure custom-domain binding to reach `Ready` state (handles TXT validation automatically).
-6. Seed PostgreSQL schema if needed.
-7. Purge Cloudflare cache via API to serve fresh content.
+- Single Terraform apply with `enable_custom_domain=true`, `cloudflare_proxied=true` (enabled by default), `allow_azure_services_postgres=false`, and `manage_blog_validation_record=false`.
+- Wait for DNS propagation (`dig` CNAME check).
+- Apply PostgreSQL schema through a private SQL runner ACI.
+- Build the Vite app in GitHub Actions with Node 24.
+- Deploy the prebuilt static site plus Functions using `Azure/static-web-apps-deploy@v1` with app build skipping enabled.
+- Wait for Azure custom-domain binding to reach `Ready` state (handles TXT validation automatically).
+- Purge Cloudflare cache via API to serve fresh content.
 
 Preview environment notes:
 
@@ -114,8 +135,9 @@ Database seeding behavior:
 
 1. Read `key_vault_name` from OpenTofu output.
 2. Read `database-url` from Key Vault.
-3. Check `to_regclass('public.users')`.
-4. Run `blog/schema.sql` only when schema is missing.
+3. Launch private ACI SQL runner in the delegated `sql-runner` subnet.
+4. Run SQL with the digest-pinned SQL runner image for immutable execution.
+5. Apply `blog/schema.sql` (plus E2E seed SQL in PR real-db lane), then delete the container group.
 
 Scheduled purge behavior:
 
@@ -133,6 +155,13 @@ Scheduled purge behavior:
 - `AZURE_CLIENT_SECRET`
 - `CF_API_TOKEN`
 - `CF_ZONE_ID`
+
+## Infracost diagnostics note
+
+- Workspace setting `.vscode/settings.json` currently sets `infracost.enableDiagnostics=false`.
+- Reason: the Infracost VS Code extension exposes one diagnostics toggle for both FinOps and tag policy findings; it does not provide a tag-only suppression switch.
+- Our Terraform tagging is enforced through shared locals (`local.common_tags`), so inline Infracost tag diagnostics were disabled to avoid duplicate/noisy findings.
+- To re-enable Infracost diagnostics later, set `infracost.enableDiagnostics` back to `true` in `.vscode/settings.json`.
 
 ## Local commands
 

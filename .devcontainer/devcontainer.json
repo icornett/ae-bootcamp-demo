@@ -17,8 +17,7 @@
                 "opentofu.vscode-opentofu",
                 "github.vscode-github-actions",
                 "ms-azuretools.vscode-azure-github-copilot",
-                "ms-ossdata.vscode-postgresql",
-                "infracost.infracost"
+                "ms-ossdata.vscode-postgresql"
             ],
             "settings": {}
         }

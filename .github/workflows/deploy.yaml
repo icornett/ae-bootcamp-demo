@@ -21,6 +21,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: read
     outputs:
       pull_request_number: ${{ steps.cpr.outputs.pull-request-number }}
     steps:

@@ -236,7 +236,10 @@ jobs:
         if: needs.detect-blog-changes.outputs.blog_changed == 'true'
         run: |
           npx --yes wait-port 127.0.0.1:5432 --timeout 30000
-          PGPASSWORD=traininglog psql -h 127.0.0.1 -U traininglog -d training_log -f schema.sql
+          PGPASSWORD=traininglog psql -h 127.0.0.1 -U traininglog -d training_log -f db/baseline/main.sql -v ON_ERROR_STOP=1
+          for migration in $(find db/migrations -name '*.up.sql' | sort); do
+            PGPASSWORD=traininglog psql -h 127.0.0.1 -U traininglog -d training_log -f "$migration" -v ON_ERROR_STOP=1
+          done
 
       - name: Build API and Frontend
         if: needs.detect-blog-changes.outputs.blog_changed == 'true'
@@ -506,7 +509,16 @@ jobs:
           SUBSCRIPTION_SUFFIX="${ARM_SUBSCRIPTION_ID:0:8}"
           SQL_RUNNER_NAME="workout-sql-runner-staging-${SUBSCRIPTION_SUFFIX}"
           VNET_NAME="workout-vnet-${SUBSCRIPTION_SUFFIX}"
-          SCHEMA_SQL_B64="$(base64 -w0 "$GITHUB_WORKSPACE/blog/schema.sql")"
+          SCHEMA_SQL_B64="$(
+            {
+              cat "$GITHUB_WORKSPACE/blog/db/baseline/main.sql"
+              printf '\n'
+              for f in $(find "$GITHUB_WORKSPACE/blog/db/migrations" -name '*.up.sql' | sort); do
+                cat "$f"
+                printf '\n'
+              done
+            } | base64 -w0
+          )"
 
           cleanup_sql_runner() {
             az container delete \
@@ -719,7 +731,16 @@ jobs:
           SUBSCRIPTION_SUFFIX="${ARM_SUBSCRIPTION_ID:0:8}"
           SQL_RUNNER_NAME="workout-sql-runner-staging-${SUBSCRIPTION_SUFFIX}"
           VNET_NAME="workout-vnet-${SUBSCRIPTION_SUFFIX}"
-          SCHEMA_SQL_B64="$(base64 -w0 "$GITHUB_WORKSPACE/blog/schema.sql")"
+          SCHEMA_SQL_B64="$(
+            {
+              cat "$GITHUB_WORKSPACE/blog/db/baseline/main.sql"
+              printf '\n'
+              for f in $(find "$GITHUB_WORKSPACE/blog/db/migrations" -name '*.up.sql' | sort); do
+                cat "$f"
+                printf '\n'
+              done
+            } | base64 -w0
+          )"
 
           cleanup_sql_runner() {
             az container delete \
@@ -878,7 +899,16 @@ jobs:
           SUBSCRIPTION_SUFFIX="${ARM_SUBSCRIPTION_ID:0:8}"
           SQL_RUNNER_NAME="workout-sql-runner-${SUBSCRIPTION_SUFFIX}"
           VNET_NAME="workout-vnet-${SUBSCRIPTION_SUFFIX}"
-          SCHEMA_SQL_B64="$(base64 -w0 "$GITHUB_WORKSPACE/blog/schema.sql")"
+          SCHEMA_SQL_B64="$(
+            {
+              cat "$GITHUB_WORKSPACE/blog/db/baseline/main.sql"
+              printf '\n'
+              for f in $(find "$GITHUB_WORKSPACE/blog/db/migrations" -name '*.up.sql' | sort); do
+                cat "$f"
+                printf '\n'
+              done
+            } | base64 -w0
+          )"
           SEED_SQL_B64="$(base64 -w0 "$GITHUB_WORKSPACE/blog/tests/e2e/seed/real-db-seed.sql")"
 
           cleanup_sql_runner() {
@@ -1192,7 +1222,16 @@ jobs:
           SUBSCRIPTION_SUFFIX="${ARM_SUBSCRIPTION_ID:0:8}"
           SQL_RUNNER_NAME="workout-sql-runner-${SUBSCRIPTION_SUFFIX}"
           VNET_NAME="workout-vnet-${SUBSCRIPTION_SUFFIX}"
-          SCHEMA_SQL_B64="$(base64 -w0 "$GITHUB_WORKSPACE/blog/schema.sql")"
+          SCHEMA_SQL_B64="$(
+            {
+              cat "$GITHUB_WORKSPACE/blog/db/baseline/main.sql"
+              printf '\n'
+              for f in $(find "$GITHUB_WORKSPACE/blog/db/migrations" -name '*.up.sql' | sort); do
+                cat "$f"
+                printf '\n'
+              done
+            } | base64 -w0
+          )"
 
           cleanup_sql_runner() {
             az container delete \

@@ -51,7 +51,7 @@ jobs:
         id: cpr
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_TOKEN_PAT }}
           commit-message: "chore: update training-log submodule"
           title: "chore: update training-log release"
           body: |
@@ -79,7 +79,7 @@ jobs:
       - name: Enable auto-merge on release PR
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_TOKEN_PAT }}
           pull-request-number: ${{ needs.release-pr.outputs.pull_request_number }}
           merge-method: squash
 
